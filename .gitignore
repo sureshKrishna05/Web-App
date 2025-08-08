@@ -4,6 +4,7 @@
 /node_modules
 /.pnp
 .pnp.js
+node_modules
 
 # Build output from Vite and Electron Forge
 /out
@@ -24,8 +25,12 @@ lerna-debug.log*
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
+
+# Windows-specific generated files
 Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
 
 # IDEs and editors
 /.idea
@@ -40,6 +45,12 @@ Thumbs.db
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Visual Studio cache files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
 
 # Environment variables
 .env
