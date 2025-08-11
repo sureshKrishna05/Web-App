@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 
-// --- Icon Components ---
+// --- Import the real page components ---
+import DashboardPage from './pages/DashboardPage';
+//import SettingsPage from './pages/SettingsPage';
+import ItemsPage from './pages/ItemsPage';
+import BillingPage from './pages/BillingPage';
+//import PlaceholderPage from './pages/PlaceholderPage';
+
+// --- Icon Components (No change) ---
 const IconDashboard = () => <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>;
 const IconSales = () => <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>;
 const IconPurchases = () => <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>;
@@ -12,7 +19,7 @@ const IconCollapse = () => <svg className="w-6 h-6 flex-shrink-0 transition-tran
 const IconChevronDown = () => <svg className="w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>;
 const IconLogo = () => <svg className="h-10 w-10" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="48" stroke="white" strokeWidth="4"/><path d="M30 70V30L50 50L70 30V70L50 50L30 70Z" stroke="white" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round"/></svg>;
 
-// --- Data for Navigation ---
+// --- Data for Navigation (No change) ---
 const navItems = [
     { name: 'Dashboard', icon: <IconDashboard /> },
     { name: 'Sales', icon: <IconSales />, submenu: [{ name: 'New Invoice' }, { name: 'Sales History' }] },
@@ -22,130 +29,58 @@ const navItems = [
     { name: 'Reports', icon: <IconReports /> },
 ];
 
-// --- Reusable Page Components ---
-const DashboardPage = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-2">Sales Overview</h2>
-            <p className="text-gray-600">Today's sales will be summarized here.</p>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-2">Stock Alerts</h2>
-            <p className="text-gray-600">Items running low on stock will appear here.</p>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-2">Quick Actions</h2>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">New Invoice</button>
-        </div>
-    </div>
-);
+// --- The old, duplicate Page Components have been removed ---
 
-const SettingsPage = () => (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-2">Business Settings</h2>
-        <p className="text-gray-600">The form to set up the business profile will go here.</p>
-    </div>
-);
-
-const PlaceholderPage = ({ pageName }) => (
-     <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-2">{pageName}</h2>
-        <p className="text-gray-600">The content for the {pageName} page will go here.</p>
-    </div>
-);
-
-// --- Sidebar Component ---
+// --- Sidebar Component (No change) ---
 const Sidebar = ({ activePage, setActivePage }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [openSubmenus, setOpenSubmenus] = useState({});
-
-    useEffect(() => {
-        if (isCollapsed) {
-            setOpenSubmenus({});
-        }
-    }, [isCollapsed]);
-
-    const handleToggleSubmenu = (menuName) => {
-        if (isCollapsed) return;
-        setOpenSubmenus(prev => ({ ...prev, [menuName]: !prev[menuName] }));
-    };
-
+    useEffect(() => { if (isCollapsed) setOpenSubmenus({}); }, [isCollapsed]);
+    const handleToggleSubmenu = (menuName) => { if (!isCollapsed) setOpenSubmenus(prev => ({ ...prev, [menuName]: !prev[menuName] })); };
     return (
-        <nav 
-            className={`flex flex-col text-white transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-20' : 'w-64'}`} 
-            style={{ backgroundColor: '#31708E' }}
-        >
+        <nav className={`flex flex-col text-white transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-20' : 'w-64'}`} style={{ backgroundColor: '#31708E' }}>
             <div className="flex items-center p-4 border-b border-white/10 h-[65px] overflow-hidden">
                 <div className="flex-shrink-0"><IconLogo /></div>
-                {!isCollapsed && (
-                    <div className="ml-3 whitespace-nowrap">
-                        <p className="font-bold text-lg">Matrix Life Science</p>
-                        <p className="text-xs text-gray-300">Tvs Tolgate, Trichy</p>
-                    </div>
-                )}
+                {!isCollapsed && (<div className="ml-3 whitespace-nowrap"><p className="font-bold text-lg">Matrix Life Science</p><p className="text-xs text-gray-300">Tvs Tolgate, Trichy</p></div>)}
             </div>
-
             <ul className="flex flex-col p-2 space-y-1 flex-grow overflow-y-auto">
                 {navItems.map((item) => (
                     <li key={item.name}>
                         {item.submenu ? (
                             <>
                                 <button onClick={() => handleToggleSubmenu(item.name)} className="w-full flex items-center justify-between p-3 rounded-md hover:bg-white/10 transition-colors text-left">
-                                    <span className="flex items-center">
-                                        {item.icon}
-                                        {!isCollapsed && <span className="ml-3 whitespace-nowrap">{item.name}</span>}
-                                    </span>
+                                    <span className="flex items-center">{item.icon}{!isCollapsed && <span className="ml-3 whitespace-nowrap">{item.name}</span>}</span>
                                     {!isCollapsed && <IconChevronDown className={`transition-transform ${openSubmenus[item.name] ? 'rotate-180' : ''}`} />}
                                 </button>
                                 <ul className={`overflow-hidden transition-all duration-300 ease-in-out ${openSubmenus[item.name] ? 'max-h-40' : 'max-h-0'}`}>
-                                    {item.submenu.map(subItem => (
-                                        <li key={subItem.name}>
-                                            <a href="#" onClick={(e) => { e.preventDefault(); setActivePage(subItem.name); }} className={`flex items-center p-2 rounded-md hover:bg-white/10 transition-colors ml-6 ${activePage === subItem.name ? 'bg-white/10' : ''}`}>
-                                                {!isCollapsed && <span className="whitespace-nowrap text-sm">{subItem.name}</span>}
-                                            </a>
-                                        </li>
-                                    ))}
+                                    {item.submenu.map(subItem => (<li key={subItem.name}><a href="#" onClick={(e) => { e.preventDefault(); setActivePage(subItem.name); }} className={`flex items-center p-2 rounded-md hover:bg-white/10 transition-colors ml-6 ${activePage === subItem.name ? 'bg-white/10' : ''}`}>{!isCollapsed && <span className="whitespace-nowrap text-sm">{subItem.name}</span>}</a></li>))}
                                 </ul>
                             </>
-                        ) : (
-                            <a href="#" onClick={(e) => { e.preventDefault(); setActivePage(item.name); }} className={`flex items-center p-3 rounded-md hover:bg-white/10 transition-colors ${activePage === item.name ? 'bg-white/10' : ''}`}>
-                                {item.icon}
-                                {!isCollapsed && <span className="ml-3 whitespace-nowrap">{item.name}</span>}
-                            </a>
-                        )}
+                        ) : (<a href="#" onClick={(e) => { e.preventDefault(); setActivePage(item.name); }} className={`flex items-center p-3 rounded-md hover:bg-white/10 transition-colors ${activePage === item.name ? 'bg-white/10' : ''}`}>{item.icon}{!isCollapsed && <span className="ml-3 whitespace-nowrap">{item.name}</span>}</a>)}
                     </li>
                 ))}
             </ul>
-
             <div className="p-2 border-t border-white/10">
-                <a href="#" onClick={(e) => { e.preventDefault(); setActivePage('Settings'); }} className={`flex items-center w-full p-3 rounded-md hover:bg-white/10 transition-colors ${activePage === 'Settings' ? 'bg-white/10' : ''}`}>
-                    <IconSettings />
-                    {!isCollapsed && <span className="ml-3 whitespace-nowrap">Settings</span>}
-                </a>
-                <button onClick={() => setIsCollapsed(!isCollapsed)} className="flex items-center w-full p-3 rounded-md hover:bg-white/10 transition-colors">
-                    <IconCollapse className={isCollapsed ? 'rotate-180' : ''}/>
-                    {!isCollapsed && <span className="ml-3 whitespace-nowrap">Collapse</span>}
-                </button>
+                <a href="#" onClick={(e) => { e.preventDefault(); setActivePage('Settings'); }} className={`flex items-center w-full p-3 rounded-md hover:bg-white/10 transition-colors ${activePage === 'Settings' ? 'bg-white/10' : ''}`}><IconSettings />{!isCollapsed && <span className="ml-3 whitespace-nowrap">Settings</span>}</a>
+                <button onClick={() => setIsCollapsed(!isCollapsed)} className="flex items-center w-full p-3 rounded-md hover:bg-white/10 transition-colors"><IconCollapse className={isCollapsed ? 'rotate-180' : ''}/>{!isCollapsed && <span className="ml-3 whitespace-nowrap">Collapse</span>}</button>
             </div>
         </nav>
     );
 };
 
-// --- Main Content Component ---
+// --- UPDATED: MainContent Component ---
 const MainContent = ({ page }) => {
     const renderPage = () => {
         switch (page) {
-            case 'Dashboard':
-                return <DashboardPage />;
-            case 'Settings':
-                return <SettingsPage />;
-            default:
-                return <PlaceholderPage pageName={page} />;
+            case 'Dashboard': return <DashboardPage />;
+            case 'Settings': return <SettingsPage />;
+            case 'Items': return <ItemsPage />;
+            case 'New Invoice': return <BillingPage />;
+            default: return <PlaceholderPage pageName={page} />;
         }
     };
-
     return (
-        <main className="flex-1 p-6 overflow-auto bg-[#E9E9E9]">
+        <main className="flex-1 overflow-auto bg-[#E9E9E9] p-6">
             <h1 className="text-3xl font-bold text-gray-800">{page}</h1>
             <div className="border-b-2 border-gray-300 mt-2 mb-6"></div>
             {renderPage()}
@@ -153,10 +88,9 @@ const MainContent = ({ page }) => {
     );
 };
 
-// --- The Main App Component (Now much cleaner) ---
+// --- Main App Component (No change) ---
 export default function App() {
     const [activePage, setActivePage] = useState('Dashboard');
-
     return (
         <div className="flex flex-row h-screen w-screen overflow-hidden">
             <Sidebar activePage={activePage} setActivePage={setActivePage} />
