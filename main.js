@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const DatabaseService = require('./src/database/database');
+// Assuming your DatabaseService class is in this file
+// Note: You will need to create this file and its class methods.
+const DatabaseService = require('./src/database/database'); 
 
 let db;
 
@@ -11,104 +13,64 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true
-    }
+      contextIsolation: true,
+    },
   });
 
-  win.loadURL('http://localhost:5173'); // for dev mode
+  // This logic correctly loads the Vite dev server or the production build file.
+  if (process.env.VITE_DEV_SERVER_URL) {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL);
+    win.webContents.openDevTools();
+  } else {
+    win.loadFile(path.join(__dirname, 'dist/index.html'));
+  }
 }
 
-// Initialize database when app is ready
+// This function sets up all the specific listeners for your database.
+function setupDatabaseHandlers() {
+  if (!db) return;
+
+  // --- Medicine Handlers ---
+  ipcMain.handle('get-all-medicines', () => db.getAllMedicines());
+  ipcMain.handle('search-medicines', (event, searchTerm) => db.searchMedicines(searchTerm));
+  ipcMain.handle('add-medicine', (event, medicine) => db.addMedicine(medicine));
+  ipcMain.handle('update-medicine', (event, id, medicine) => db.updateMedicine(id, medicine));
+  ipcMain.handle('delete-medicine', (event, id) => db.deleteMedicine(id));
+
+  // --- Invoice Handlers ---
+  ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));
+  ipcMain.handle('get-all-invoices', () => db.getAllInvoices());
+  ipcMain.handle('generate-invoice-number', () => db.generateInvoiceNumber());
+
+  // --- Dashboard Handlers ---
+  ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());
+}
+
+// Initialize the app
 app.whenReady().then(() => {
-  // Initialize database
+  // Initialize your database service
   db = new DatabaseService();
   
-  createWindow();
-  
-  // Set up IPC handlers for database operations
+  // Set up all the IPC handlers
   setupDatabaseHandlers();
+  
+  // Create the main application window
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
 });
 
-// Clean up database connection when app is closing
-app.on('before-quit', () => {
-  if (db) {
-    db.close();
+// Quit when all windows are closed, except on macOS.
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    // Important: Close the database connection before quitting.
+    if (db) {
+      db.close();
+    }
+    app.quit();
   }
 });
-
-function setupDatabaseHandlers() {
-  // Medicine operations
-  ipcMain.handle('get-all-medicines', async () => {
-    try {
-      return db.getAllMedicines();
-    } catch (error) {
-      throw new Error(`Failed to get medicines: ${error.message}`);
-    }
-  });
-
-  ipcMain.handle('search-medicines', async (event, searchTerm) => {
-    try {
-      return db.searchMedicines(searchTerm);
-    } catch (error) {
-      throw new Error(`Failed to search medicines: ${error.message}`);
-    }
-  });
-
-  ipcMain.handle('add-medicine', async (event, medicine) => {
-    try {
-      return db.addMedicine(medicine);
-    } catch (error) {
-      throw new Error(`Failed to add medicine: ${error.message}`);
-    }
-  });
-
-  ipcMain.handle('update-medicine', async (event, id, medicine) => {
-    try {
-      return db.updateMedicine(id, medicine);
-    } catch (error) {
-      throw new Error(`Failed to update medicine: ${error.message}`);
-    }
-  });
-
-  ipcMain.handle('delete-medicine', async (event, id) => {
-    try {
-      return db.deleteMedicine(id);
-    } catch (error) {
-      throw new Error(`Failed to delete medicine: ${error.message}`);
-    }
-  });
-
-  // Invoice operations
-  ipcMain.handle('create-invoice', async (event, invoiceData) => {
-    try {
-      return db.createInvoice(invoiceData);
-    } catch (error) {
-      throw new Error(`Failed to create invoice: ${error.message}`);
-    }
-  });
-
-  ipcMain.handle('get-all-invoices', async () => {
-    try {
-      return db.getAllInvoices();
-    } catch (error) {
-      throw new Error(`Failed to get invoices: ${error.message}`);
-    }
-  });
-
-  ipcMain.handle('generate-invoice-number', async () => {
-    try {
-      return db.generateInvoiceNumber();
-    } catch (error) {
-      throw new Error(`Failed to generate invoice number: ${error.message}`);
-    }
-  });
-
-  // Dashboard operations
-  ipcMain.handle('get-dashboard-stats', async () => {
-    try {
-      return db.getDashboardStats();
-    } catch (error) {
-      throw new Error(`Failed to get dashboard stats: ${error.message}`);
-    }
-  });
-}
