@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron-forge start",
     "dev": "electron-forge start",
+    "build": "vite build",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
