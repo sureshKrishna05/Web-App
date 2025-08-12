@@ -1,10 +1,10 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-// Assuming your DatabaseService class is in this file
-// Note: You will need to create this file and its class methods.
-const DatabaseService = require('./src/database/database'); 
+const DatabaseService = require('./src/database/database');
 
 let db;
+
+const isDev = !app.isPackaged; // true if running `npm run dev`
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -17,16 +17,16 @@ function createWindow() {
     },
   });
 
-  // This logic correctly loads the Vite dev server or the production build file.
-  if (process.env.VITE_DEV_SERVER_URL) {
-    win.loadURL(process.env.VITE_DEV_SERVER_URL);
+  if (isDev) {
+    // Point Electron to Vite dev server
+    win.loadURL('http://localhost:5173');
     win.webContents.openDevTools();
   } else {
+    // Load built app
     win.loadFile(path.join(__dirname, 'dist/index.html'));
   }
 }
 
-// This function sets up all the specific listeners for your database.
 function setupDatabaseHandlers() {
   if (!db) return;
 
@@ -46,31 +46,19 @@ function setupDatabaseHandlers() {
   ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());
 }
 
-// Initialize the app
 app.whenReady().then(() => {
-  // Initialize your database service
   db = new DatabaseService();
-  
-  // Set up all the IPC handlers
   setupDatabaseHandlers();
-  
-  // Create the main application window
   createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-// Quit when all windows are closed, except on macOS.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    // Important: Close the database connection before quitting.
-    if (db) {
-      db.close();
-    }
+    if (db) db.close();
     app.quit();
   }
 });
