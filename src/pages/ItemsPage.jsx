@@ -1,67 +1,154 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import AddItemModal from '../components/AddItemModal';
 
-const ItemsPage = () => {
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [items, setItems] = useState([
-        // Sample data that will be replaced by your database
-        { id: 1, name: 'Paracetamol 500mg', batch: 'PC123', expiry: '2025-12-31', stock: 100, price: 5.50 },
-        { id: 2, name: 'Amoxicillin 250mg', batch: 'AMX456', expiry: '2026-06-30', stock: 50, price: 12.75 },
-        { id: 3, name: 'Ibuprofen 200mg', batch: 'IBU789', expiry: '2024-10-31', stock: 200, price: 8.00 },
-    ]);
+// --- Helper Icon Components ---
+const IconEdit = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.586a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>;
+const IconDelete = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
+const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>;
 
-    const handleAddItem = (newItem) => {
-        // Later, this will save to the database. For now, it just updates the local state.
-        console.log("New item to add:", newItem);
-        setItems(prevItems => [...prevItems, { ...newItem, id: Date.now() }]);
+
+const ItemsPage = () => {
+    // --- STATE MANAGEMENT ---
+    const [medicines, setMedicines] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedItem, setSelectedItem] = useState(null); // For editing
+
+    // --- DATA FETCHING ---
+    const fetchMedicines = useCallback(async () => {
+        try {
+            setLoading(true);
+            const data = await window.electronAPI.getAllMedicines();
+            setMedicines(data);
+        } catch (err) {
+            setError(err.message);
+            console.error("Failed to fetch medicines:", err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    // Fetch data when the component mounts
+    useEffect(() => {
+        fetchMedicines();
+    }, [fetchMedicines]);
+
+    // --- HANDLERS ---
+    const handleOpenModal = (item = null) => {
+        setSelectedItem(item); // If item is null, it's an "Add" operation
+        setIsModalOpen(true);
     };
 
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setSelectedItem(null);
+    };
+
+    const handleSave = async (itemData) => {
+        try {
+            if (selectedItem) {
+                // Update existing item
+                await window.electronAPI.updateMedicine(selectedItem.id, itemData);
+            } else {
+                // Add new item
+                await window.electronAPI.addMedicine(itemData);
+            }
+            // Refresh the data and close the modal
+            fetchMedicines();
+            handleCloseModal();
+        } catch (err) {
+            console.error("Failed to save item:", err);
+            // Here you could set an error state to show in the modal
+        }
+    };
+
+    const handleDelete = async (id) => {
+        // Use a confirmation dialog for better UX
+        if (window.confirm('Are you sure you want to delete this item?')) {
+            try {
+                await window.electronAPI.deleteMedicine(id);
+                // Refresh the data after deletion
+                fetchMedicines();
+            } catch (err) {
+                console.error("Failed to delete item:", err);
+                alert('Failed to delete item. Please try again.');
+            }
+        }
+    };
+
+    // --- RENDER LOGIC ---
+    if (loading) {
+        return <div className="text-center p-8">Loading inventory...</div>;
+    }
+
+    if (error) {
+        return <div className="text-center p-8 text-red-500">Error: {error}</div>;
+    }
+
     return (
-        <div className="p-6 bg-[#E9E9E9] h-full">
+        <div className="p-4">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-800">Item Master</h1>
-                <button 
-                    onClick={() => setIsModalOpen(true)}
-                    style={{ backgroundColor: '#31708E' }}
-                    className="text-white px-6 py-2 rounded-md shadow hover:opacity-90 transition-opacity"
+                <h1 className="text-2xl font-semibold text-gray-800">Manage Inventory</h1>
+                <button
+                    onClick={() => handleOpenModal()}
+                    className="flex items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out shadow-md"
                 >
+                    <IconPlus />
                     Add New Item
                 </button>
             </div>
 
-            <div className="bg-white p-4 rounded-lg shadow-md overflow-x-auto">
-                <table className="w-full table-auto">
-                    <thead className="border-b-2 border-gray-200">
-                        <tr>
-                            <th className="text-left p-3 font-semibold text-gray-600">Item Name</th>
-                            <th className="text-left p-3 font-semibold text-gray-600">Batch No.</th>
-                            <th className="text-left p-3 font-semibold text-gray-600">Expiry Date</th>
-                            <th className="text-right p-3 font-semibold text-gray-600">Stock</th>
-                            <th className="text-right p-3 font-semibold text-gray-600">Price</th>
-                            <th className="text-center p-3 font-semibold text-gray-600">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {items.map((item) => (
-                            <tr key={item.id} className="border-b hover:bg-gray-50">
-                                <td className="p-3">{item.name}</td>
-                                <td className="p-3">{item.batch}</td>
-                                <td className="p-3">{item.expiry}</td>
-                                <td className="p-3 text-right">{item.stock}</td>
-                                <td className="p-3 text-right">₹{item.price.toFixed(2)}</td>
-                                <td className="p-3 text-center">
-                                    <button className="text-blue-600 hover:underline">Edit</button>
-                                </td>
+            <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Batch No.</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Expiry Date</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Price</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Stock</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {medicines.length > 0 ? (
+                                medicines.map((item) => (
+                                    <tr key={item.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.batch_number}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.expiry_date}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{item.price.toFixed(2)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.stock}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div className="flex justify-end space-x-4">
+                                                <button onClick={() => handleOpenModal(item)} className="text-blue-600 hover:text-blue-900 transition-colors">
+                                                    <IconEdit />
+                                                </button>
+                                                <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-900 transition-colors">
+                                                    <IconDelete />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="6" className="text-center py-10 text-gray-500">No medicines found in inventory.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {isModalOpen && (
-                <AddItemModal 
-                    onClose={() => setIsModalOpen(false)} 
-                    onAddItem={handleAddItem}
+                <AddItemModal
+                    isOpen={isModalOpen}
+                    onClose={handleCloseModal}
+                    onSave={handleSave}
+                    item={selectedItem}
                 />
             )}
         </div>

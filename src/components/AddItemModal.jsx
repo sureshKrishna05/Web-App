@@ -1,14 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const AddItemModal = ({ onClose, onAddItem }) => {
+const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
+    // --- STATE MANAGEMENT ---
     const [formData, setFormData] = useState({
         name: '',
-        batch: '',
-        expiry: '',
-        stock: '',
-        price: ''
+        batch_number: '',
+        expiry_date: '',
+        price: '',
+        stock: ''
     });
+    const [error, setError] = useState('');
 
+    // --- EFFECT ---
+    // Pre-fills the form with data when editing an existing item.
+    useEffect(() => {
+        if (item) {
+            setFormData({
+                name: item.name || '',
+                batch_number: item.batch_number || '',
+                expiry_date: item.expiry_date || '',
+                price: item.price || '',
+                stock: item.stock || ''
+            });
+        } else {
+            // Clears the form for adding a new item.
+            setFormData({ name: '', batch_number: '', expiry_date: '', price: '', stock: '' });
+        }
+    }, [item, isOpen]);
+
+    // --- HANDLERS ---
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -16,14 +36,29 @@ const AddItemModal = ({ onClose, onAddItem }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onAddItem(formData);
-        onClose();
+        // Basic validation to ensure no fields are empty.
+        for (const key in formData) {
+            if (formData[key] === '') {
+                setError(`Please fill out the ${key.replace('_', ' ')} field.`);
+                return;
+            }
+        }
+        setError('');
+        // **FIX**: Calls the onSave function passed from the parent.
+        onSave(formData);
     };
+
+    // --- RENDER LOGIC ---
+    if (!isOpen) {
+        return null;
+    }
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50">
             <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-2xl">
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#31708E' }}>Add New Item</h2>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#31708E' }}>
+                    {item ? 'Edit Item' : 'Add New Item'}
+                </h2>
                 <div className="border-b-2 border-gray-300 mb-6"></div>
                 
                 <form onSubmit={handleSubmit}>
@@ -36,9 +71,10 @@ const AddItemModal = ({ onClose, onAddItem }) => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Batch No.</label>
-                                <input type="text" name="batch" value={formData.batch} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+                                {/* **FIX**: Changed name from 'batch' to 'batch_number' */}
+                                <input type="text" name="batch_number" value={formData.batch_number} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
                             </div>
-                             <div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700">Stock Quantity</label>
                                 <input type="number" name="stock" value={formData.stock} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required />
                             </div>
@@ -47,7 +83,8 @@ const AddItemModal = ({ onClose, onAddItem }) => {
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Expiry Date</label>
-                                <input type="date" name="expiry" value={formData.expiry} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+                                {/* **FIX**: Changed name from 'expiry' to 'expiry_date' */}
+                                <input type="date" name="expiry_date" value={formData.expiry_date} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Selling Price (₹)</label>
@@ -56,12 +93,14 @@ const AddItemModal = ({ onClose, onAddItem }) => {
                         </div>
                     </div>
 
+                    {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
+
                     <div className="flex justify-end space-x-4 pt-8">
                         <button type="button" onClick={onClose} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors">
                             Close
                         </button>
                         <button type="submit" style={{ backgroundColor: '#31708E' }} className="px-6 py-2 text-white rounded-md hover:opacity-90 transition-opacity">
-                            Save
+                            {item ? 'Update' : 'Save'}
                         </button>
                     </div>
                 </form>

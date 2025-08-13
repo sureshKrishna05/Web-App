@@ -1,22 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
-import useDatabase from '../hooks/useDatabase'; // Make sure this path is correct
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// Helper component for printing
-const PrintableBill = React.forwardRef(({ billItems, patientName, billDate, totals }, ref) => {
-    // This component remains unchanged.
+// A helper component for the printable invoice. This contains the print layout.
+const PrintableBill = React.forwardRef(({ billItems, clientName, invoiceNumber, totals }, ref) => {
     return (
         <div ref={ref} className="hidden print:block p-10">
             <h2 className="text-center text-3xl font-bold mb-2">Pharmacy Invoice</h2>
-            <p className="text-center text-gray-600">123 Health St, Wellness City</p>
+            <p className="text-center text-gray-600">Matrix Life Science, Tvs Tolgate, Trichy</p>
             <hr className="my-6" />
             <div className="flex justify-between mb-6">
                 <div>
                     <p className="font-bold">Bill To:</p>
-                    <p>{patientName || 'N/A'}</p>
+                    <p>{clientName || 'N/A'}</p>
                 </div>
                 <div>
-                    <p><span className="font-bold">Bill Number:</span> <span>{`INV-${Date.now()}`}</span></p>
-                    <p><span className="font-bold">Date:</span> <span>{new Date(billDate).toLocaleDateString()}</span></p>
+                    <p><span className="font-bold">Invoice Number:</span> <span>{invoiceNumber}</span></p>
+                    <p><span className="font-bold">Date:</span> <span>{new Date().toLocaleDateString()}</span></p>
                 </div>
             </div>
             <table className="min-w-full divide-y divide-gray-300">
@@ -24,32 +22,36 @@ const PrintableBill = React.forwardRef(({ billItems, patientName, billDate, tota
                     <tr>
                         <th className="py-2 text-left text-sm font-semibold text-gray-900">Medicine</th>
                         <th className="py-2 text-left text-sm font-semibold text-gray-900">Qty</th>
+                        <th className="py-2 text-left text-sm font-semibold text-gray-900">Free</th>
+                        <th className="py-2 text-left text-sm font-semibold text-gray-900">PTR</th>
                         <th className="py-2 text-left text-sm font-semibold text-gray-900">Rate</th>
                         <th className="py-2 text-right text-sm font-semibold text-gray-900">Amount</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                    {billItems.map(item => (
-                         <tr key={item.id}>
+                    {billItems.map((item, index) => (
+                         <tr key={`${item.id}-${index}`}>
                             <td className="py-2">{item.name}</td>
                             <td className="py-2">{item.quantity}</td>
+                            <td className="py-2">{item.free_quantity}</td>
+                            <td className="py-2">₹{item.ptr.toFixed(2)}</td>
                             <td className="py-2">₹{item.price.toFixed(2)}</td>
-                            <td className="py-2 text-right">₹{item.amount.toFixed(2)}</td>
+                            <td className="py-2 text-right">₹{(item.price * item.quantity).toFixed(2)}</td>
                         </tr>
                     ))}
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colSpan="3" className="py-2 pt-4 text-right font-medium">Subtotal</td>
+                        <td colSpan="5" className="py-2 pt-4 text-right font-medium">Subtotal</td>
                         <td className="py-2 pt-4 text-right font-semibold">₹{totals.subtotal.toFixed(2)}</td>
                     </tr>
-                    <tr>
-                        <td colSpan="3" className="py-2 text-right font-medium">GST (5%)</td>
-                        <td className="py-2 text-right font-semibold">₹{totals.gst.toFixed(2)}</td>
+                     <tr>
+                        <td colSpan="5" className="py-2 text-right font-medium">Tax (GST {totals.gstRate}%)</td>
+                        <td className="py-2 text-right font-semibold">₹{totals.tax.toFixed(2)}</td>
                     </tr>
                     <tr>
-                        <td colSpan="3" className="py-2 text-right font-bold text-lg">Grand Total</td>
-                        <td className="py-2 text-right font-bold text-lg">₹{totals.grandTotal.toFixed(2)}</td>
+                        <td colSpan="5" className="py-2 text-right font-bold text-lg">Grand Total</td>
+                        <td className="py-2 text-right font-bold text-lg">₹{totals.finalAmount.toFixed(2)}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -59,109 +61,159 @@ const PrintableBill = React.forwardRef(({ billItems, patientName, billDate, tota
 });
 
 
-// The main component for the billing/invoice page
 const BillingPage = () => {
-    // --- DATABASE STATE ---
-    // Use your custom hook to fetch live data.
-    const { data: medicines, loading, error } = useDatabase('SELECT * FROM items');
+    // --- STATE FOR NEW FEATURES ---
+    const [clients, setClients] = useState([]);
+    const [salesReps, setSalesReps] = useState([]);
+    const [clientName, setClientName] = useState('');
+    const [salesRepId, setSalesRepId] = useState('');
+    const [gstRate, setGstRate] = useState(5);
+    const [ptr, setPtr] = useState('');
+    const [freeQuantity, setFreeQuantity] = useState('');
 
-    // --- COMPONENT STATE ---
-    const [patientName, setPatientName] = useState('');
-    const [billDate, setBillDate] = useState(new Date().toISOString().split('T')[0]);
+    // --- EXISTING STATE ---
     const [searchQuery, setSearchQuery] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [selectedMedicine, setSelectedMedicine] = useState(null);
     const [quantity, setQuantity] = useState(1);
     const [billItems, setBillItems] = useState([]);
-    const [totals, setTotals] = useState({ subtotal: 0, gst: 0, grandTotal: 0 });
+    const [totals, setTotals] = useState({ subtotal: 0, tax: 0, finalAmount: 0, gstRate: 5 });
+    const [invoiceNumber, setInvoiceNumber] = useState('');
     
-    // --- REFS ---
     const printableComponentRef = useRef();
-    const searchInputRef = useRef();
-    const suggestionsRef = useRef();
+    const quantityInputRef = useRef();
 
-    // --- EFFECTS ---
-
-    // Effect to calculate totals when bill items change
+    // --- DATA FETCHING EFFECTS ---
     useEffect(() => {
-        const subtotal = billItems.reduce((sum, item) => sum + item.amount, 0);
-        const gst = subtotal * 0.05;
-        const grandTotal = subtotal + gst;
-        setTotals({ subtotal, gst, grandTotal });
-    }, [billItems]);
+        const fetchData = async () => {
+            try {
+                const fetchedClients = await window.electronAPI.getAllClients();
+                const fetchedReps = await window.electronAPI.getAllSalesReps();
+                setClients(fetchedClients);
+                setSalesReps(fetchedReps);
+            } catch (error) {
+                console.error("Failed to fetch initial data:", error);
+            }
+        };
+        fetchData();
+    }, []);
 
-    // **FIXED**: Effect to handle search suggestions using live DB data
+    const fetchInvoiceNumber = useCallback(async () => {
+        try {
+            const newInvoiceNum = await window.electronAPI.generateInvoiceNumber();
+            setInvoiceNumber(newInvoiceNum);
+        } catch (error) {
+            console.error("Failed to generate invoice number:", error);
+        }
+    }, []);
+
     useEffect(() => {
-        if (searchQuery.length > 0 && medicines) {
-            const filteredMeds = medicines.filter(med =>
-                med.name.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-            setSuggestions(filteredMeds);
+        fetchInvoiceNumber();
+    }, [fetchInvoiceNumber]);
+
+    // --- CALCULATION EFFECT ---
+    useEffect(() => {
+        const subtotal = billItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const tax = subtotal * (gstRate / 100);
+        const finalAmount = subtotal + tax;
+        setTotals({ subtotal, tax, finalAmount, gstRate });
+    }, [billItems, gstRate]);
+
+    // --- EVENT HANDLERS ---
+    const handleSearch = useCallback(async (query) => {
+        setSearchQuery(query);
+        if (query.length > 0) {
+            const results = await window.electronAPI.searchMedicines(query);
+            setSuggestions(results);
         } else {
             setSuggestions([]);
         }
-    }, [searchQuery, medicines]); // Dependency array now includes 'medicines'
-    
-    // Effect to close suggestions when clicking outside
-    useEffect(() => {
-        function handleClickOutside(event) {
-            if (suggestionsRef.current && !suggestionsRef.current.contains(event.target) && searchInputRef.current && !searchInputRef.current.contains(event.target)) {
-                setSuggestions([]);
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
-
-    // --- HANDLERS ---
 
     const handleSelectSuggestion = (med) => {
         setSelectedMedicine(med);
         setSearchQuery(med.name);
         setSuggestions([]);
-        searchInputRef.current.focus();
+        quantityInputRef.current?.focus();
     };
 
     const handleAddItem = () => {
-        // This logic remains largely the same
-        if (!selectedMedicine || !quantity || Number(quantity) <= 0) {
+        if (!selectedMedicine || !quantity || Number(quantity) < 0) {
             alert("Please select a valid medicine and quantity.");
             return;
         }
-        setBillItems(prevItems => {
-            const existingItem = prevItems.find(item => item.id === selectedMedicine.id);
-            if (existingItem) {
-                return prevItems.map(item =>
-                    item.id === selectedMedicine.id
-                        ? { ...item, quantity: item.quantity + Number(quantity), amount: (item.quantity + Number(quantity)) * item.price }
-                        : item
-                );
-            } else {
-                return [...prevItems, { ...selectedMedicine, quantity: Number(quantity), amount: selectedMedicine.price * Number(quantity) }];
-            }
-        });
+        const totalStockNeeded = Number(quantity) + Number(freeQuantity || 0);
+        if (totalStockNeeded > selectedMedicine.stock) {
+            alert(`Cannot add item. Only ${selectedMedicine.stock} units are in stock.`);
+            return;
+        }
+
+        const newItem = {
+            ...selectedMedicine,
+            quantity: Number(quantity),
+            free_quantity: Number(freeQuantity || 0),
+            ptr: Number(ptr || 0),
+        };
+
+        setBillItems(prevItems => [...prevItems, newItem]);
+
+        // Reset item-specific fields for the next entry
         setSearchQuery('');
         setSelectedMedicine(null);
         setQuantity(1);
-        searchInputRef.current.focus();
+        setFreeQuantity('');
+        setPtr('');
     };
 
     const handleRemoveItem = (itemId) => {
-        setBillItems(prevItems => prevItems.filter(item => item.id !== itemId));
+        setBillItems(prevItems => prevItems.filter((item, index) => index !== itemId));
+    };
+
+    const resetForm = useCallback(async () => {
+        setClientName('');
+        setSalesRepId('');
+        setBillItems([]);
+        setGstRate(5);
+        fetchInvoiceNumber();
+    }, [fetchInvoiceNumber]);
+
+    const handleSaveInvoice = async () => {
+        if (billItems.length === 0 || !clientName) {
+            alert("Please enter a client name and add at least one item to the invoice.");
+            return;
+        }
+        const invoiceData = {
+            invoice_number: invoiceNumber,
+            client_name: clientName,
+            sales_rep_id: salesRepId,
+            total_amount: totals.subtotal,
+            tax: totals.tax,
+            final_amount: totals.finalAmount,
+            items: billItems.map(item => ({
+                medicine_id: item.id,
+                quantity: item.quantity,
+                free_quantity: item.free_quantity,
+                unit_price: item.price,
+                ptr: item.ptr,
+                total_price: item.price * item.quantity
+            }))
+        };
+        
+        try {
+            await window.electronAPI.createInvoice(invoiceData);
+            alert(`Invoice ${invoiceNumber} saved successfully!`);
+            handlePrint();
+            resetForm();
+        } catch (error) {
+            console.error("Failed to save invoice:", error);
+            alert("Error saving invoice. Check console for details.");
+        }
     };
 
     const handlePrint = () => {
-        // This logic remains unchanged
         const printContent = printableComponentRef.current.innerHTML;
         const printWindow = window.open('', '_blank');
-        printWindow.document.write(`
-            <html>
-                <head><title>Print Bill</title>
-                <script src="https://cdn.tailwindcss.com"></script>
-                <style>body { font-family: 'Inter', sans-serif; }</style>
-                </head>
-                <body>${printContent}</body>
-            </html>`);
+        printWindow.document.write(`<html><head><title>Print Invoice</title><script src="https://cdn.tailwindcss.com"></script></head><body>${printContent}</body></html>`);
         printWindow.document.close();
         printWindow.focus();
         setTimeout(() => { 
@@ -170,92 +222,105 @@ const BillingPage = () => {
         }, 250);
     };
 
-    // --- RENDER LOGIC ---
-    
-    // Handle loading and error states from the database
-    if (loading) {
-        return <div className="flex justify-center items-center h-full"><p>Loading medicines...</p></div>;
-    }
-
-    if (error) {
-        return <div className="flex justify-center items-center h-full"><p className="text-red-500">Error fetching data: {error.message}</p></div>;
-    }
-
     return (
-        <>
-            <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-lg">
-                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="p-6 bg-[#E9E9E9] h-full">
+            <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-md p-6">
+                {/* --- Top section with Client, Sales Rep, and GST --- */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                     <div>
-                        <label htmlFor="patientName" className="block text-sm font-medium text-gray-700 mb-1">Patient Name</label>
-                        <input type="text" id="patientName" value={patientName} onChange={(e) => setPatientName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="e.g., Jane Doe" />
+                        <label className="block text-sm font-medium text-gray-700">Select or Enter Client Name</label>
+                        <input list="client-list" value={clientName} onChange={(e) => setClientName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        <datalist id="client-list">
+                            {clients.map(client => <option key={client.id} value={client.name} />)}
+                        </datalist>
                     </div>
                     <div>
-                        <label htmlFor="billDate" className="block text-sm font-medium text-gray-700 mb-1">Bill Date</label>
-                        <input type="date" id="billDate" value={billDate} onChange={(e) => setBillDate(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                        <label className="block text-sm font-medium text-gray-700">Sales Representative</label>
+                        <select value={salesRepId} onChange={(e) => setSalesRepId(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                            <option value="">Select Representative</option>
+                            {salesReps.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Total GST (%)</label>
+                        <input type="number" value={gstRate} onChange={(e) => setGstRate(Number(e.target.value))} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                     </div>
                 </div>
-                <div className="p-6 border-t border-gray-200">
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
-                        <div className="sm:col-span-6 relative">
-                            <label htmlFor="medicineSearch" className="block text-sm font-medium text-gray-700 mb-1">Search Medicine</label>
-                            <input type="text" id="medicineSearch" ref={searchInputRef} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="Type to search..." autoComplete="off" />
-                            {suggestions.length > 0 && (
-                                <div ref={suggestionsRef} className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 max-h-40 overflow-y-auto shadow-lg">
-                                    {suggestions.map(med => <div key={med.id} onClick={() => handleSelectSuggestion(med)} className="p-2 hover:bg-gray-200 cursor-pointer">{med.name} - ₹{med.price.toFixed(2)}</div>)}
-                                </div>
-                            )}
-                        </div>
-                        <div className="sm:col-span-3">
-                            <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                            <input type="number" id="quantity" value={quantity} onChange={(e) => setQuantity(e.target.value)} min="1" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
-                        </div>
-                        <div className="sm:col-span-3">
-                            <button onClick={handleAddItem} className="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out">Add Item</button>
-                        </div>
+
+                {/* --- Item entry row with PTR and Free quantity --- */}
+                <div className="grid grid-cols-12 gap-4 items-end border-t pt-6">
+                    <div className="col-span-4 relative">
+                        <label className="block text-sm font-medium text-gray-700">Select Medicine</label>
+                        <input type="text" value={searchQuery} onChange={(e) => handleSearch(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" autoComplete="off" />
+                        {suggestions.length > 0 && (
+                            <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
+                                {suggestions.map(med => <div key={med.id} onClick={() => handleSelectSuggestion(med)} className="p-2 hover:bg-gray-100 cursor-pointer">{med.name} (Stock: {med.stock})</div>)}
+                            </div>
+                        )}
+                    </div>
+                    <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700">P.T.R.</label>
+                        <input type="number" value={ptr} onChange={(e) => setPtr(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                    </div>
+                    <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700">Quantity</label>
+                        <input ref={quantityInputRef} type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} min="1" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                    </div>
+                    <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700">Free</label>
+                        <input type="number" value={freeQuantity} onChange={(e) => setFreeQuantity(e.target.value)} min="0" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                    </div>
+                    <div className="col-span-2">
+                        <button onClick={handleAddItem} className="w-full bg-green-600 text-white py-2 px-4 rounded-md shadow">Add to Invoice</button>
                     </div>
                 </div>
-                <div className="p-6">
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Medicine</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Remove</span></th>
+
+                {/* --- Invoice Items Table --- */}
+                <div className="mt-6">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Medicine</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Free</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PTR</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rate</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                             {billItems.map((item, index) => (
+                                <tr key={`${item.id}-${index}`}>
+                                    <td className="px-6 py-4 whitespace-nowrap">{item.name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{item.quantity}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{item.free_quantity}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">₹{item.ptr.toFixed(2)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">₹{item.price.toFixed(2)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right">₹{(item.price * item.quantity).toFixed(2)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                        <button onClick={() => handleRemoveItem(index)} className="text-red-600 hover:text-red-800">Remove</button>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {billItems.length > 0 ? billItems.map((item, index) => (
-                                    <tr key={item.id}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.quantity}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">₹{item.price.toFixed(2)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">₹{item.amount.toFixed(2)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium"><button onClick={() => handleRemoveItem(item.id)} className="text-red-600 hover:text-red-900">Remove</button></td>
-                                    </tr>
-                                )) : (<tr><td colSpan="6" className="text-center py-10 text-gray-500">No items added to the bill yet.</td></tr>)}
-                            </tbody>
-                        </table>
-                    </div>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
-                <div className="p-6 bg-gray-50 rounded-b-2xl grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                    <div className="flex flex-col space-y-2">
-                        <button onClick={handlePrint} className="w-full md:w-auto bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out">Print Bill</button>
-                    </div>
-                    <div className="space-y-3 text-right">
-                        <div className="flex justify-between items-center"><span className="text-md font-medium text-gray-600">Subtotal:</span><span className="text-md font-semibold text-gray-900">₹{totals.subtotal.toFixed(2)}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-md font-medium text-gray-600">GST (5%):</span><span className="text-md font-semibold text-gray-900">₹{totals.gst.toFixed(2)}</span></div>
-                        <hr className="my-2" />
-                        <div className="flex justify-between items-center"><span className="text-xl font-bold text-gray-900">Grand Total:</span><span className="text-xl font-bold text-gray-900">₹{totals.grandTotal.toFixed(2)}</span></div>
+
+                {/* --- Totals and Save Button --- */}
+                <div className="flex justify-end mt-6 pt-6 border-t">
+                    <div className="w-full max-w-sm space-y-2">
+                         <div className="flex justify-between"><span className="font-medium">Subtotal:</span><span>₹{totals.subtotal.toFixed(2)}</span></div>
+                         <div className="flex justify-between"><span className="font-medium">Tax (GST {totals.gstRate}%):</span><span>₹{totals.tax.toFixed(2)}</span></div>
+                         <div className="flex justify-between text-lg font-bold"><span >Grand Total:</span><span>₹{totals.finalAmount.toFixed(2)}</span></div>
+                         <button onClick={handleSaveInvoice} className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-md shadow hover:bg-blue-700" style={{ backgroundColor: '#31708E' }}>Save & Print Invoice</button>
                     </div>
                 </div>
             </div>
-            <PrintableBill ref={printableComponentRef} billItems={billItems} patientName={patientName} billDate={billDate} totals={totals} />
-        </>
+            <div className="hidden">
+                 <PrintableBill ref={printableComponentRef} billItems={billItems} clientName={clientName} invoiceNumber={invoiceNumber} totals={totals} />
+            </div>
+        </div>
     );
 };
 

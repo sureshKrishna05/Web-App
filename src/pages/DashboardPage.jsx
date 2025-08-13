@@ -1,52 +1,108 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
-// A reusable component for the dashboard summary cards
-const DashboardCard = ({ title, value, color }) => (
-    <div className="bg-white p-6 rounded-lg shadow-md flex flex-col justify-between">
-        <h2 className="text-lg font-semibold text-gray-600">{title}</h2>
-        <p className={`text-4xl font-bold mt-2 ${color}`}>{value}</p>
+// --- Helper Icon Components ---
+const IconMedicine = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M12 6V3m0 18v-3" /></svg>;
+const IconWarning = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>;
+const IconInvoice = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
+
+// --- Reusable Stat Card Component ---
+const StatCard = ({ title, value, icon, colorClass }) => (
+    <div className={`bg-white p-6 rounded-lg shadow-md flex items-center ${colorClass}`}>
+        <div className="p-4 rounded-full bg-white bg-opacity-30">
+            {icon}
+        </div>
+        <div className="ml-4">
+            <p className="text-lg font-semibold text-gray-700">{title}</p>
+            <p className="text-3xl font-bold text-gray-900">{value}</p>
+        </div>
     </div>
 );
 
+
 const DashboardPage = () => {
-    // In the future, this data will come from your database
-    const recentItems = [
-        { id: 1, name: 'Paracetamol 500mg', batch: 'PC123', stock: 100, price: 5.50 },
-        { id: 2, name: 'Amoxicillin 250mg', batch: 'AMX456', stock: 50, price: 12.75 },
-    ];
+    // --- STATE MANAGEMENT ---
+    const [stats, setStats] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // --- DATA FETCHING ---
+    const fetchStats = useCallback(async () => {
+        try {
+            setLoading(true);
+            const data = await window.electronAPI.getDashboardStats();
+            setStats(data);
+        } catch (err) {
+            setError(err.message);
+            console.error("Failed to fetch dashboard stats:", err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    // Fetch stats when the component mounts
+    useEffect(() => {
+        fetchStats();
+    }, [fetchStats]);
+
+    // --- RENDER LOGIC ---
+    if (loading) {
+        return <div className="text-center p-8">Loading dashboard...</div>;
+    }
+
+    if (error) {
+        return <div className="text-center p-8 text-red-500">Error: {error}</div>;
+    }
 
     return (
-        // The padding here has been reduced from p-6 to p-4
         <div className="p-4 space-y-8">
-            {/* Top row of summary cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <DashboardCard title="Total Medicine" value="0" color="text-green-500" />
-                <DashboardCard title="Pending Invoices" value="0" color="text-yellow-500" />
-                <DashboardCard title="Low Stock Items" value="0" color="text-red-500" />
+            {/* --- Top Statistics Cards --- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <StatCard 
+                    title="Total Medicines" 
+                    value={stats?.totalMedicines ?? 0}
+                    icon={<IconMedicine />}
+                    colorClass="bg-blue-100 border-l-4 border-blue-500"
+                />
+                <StatCard 
+                    title="Low Stock Items" 
+                    value={stats?.lowStockItems ?? 0}
+                    icon={<IconWarning />}
+                    colorClass="bg-yellow-100 border-l-4 border-yellow-500"
+                />
+                <StatCard 
+                    title="Total Invoices" 
+                    value={stats?.totalInvoices ?? 0}
+                    icon={<IconInvoice />}
+                    colorClass="bg-green-100 border-l-4 border-green-500"
+                />
             </div>
 
-            {/* Recently Added Products Section */}
-            <div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">Recently Added Products</h2>
-                <div className="bg-white p-4 rounded-lg shadow-md overflow-x-auto">
-                    <table className="w-full table-auto">
-                        <thead className="border-b-2 border-gray-200">
+            {/* --- Recently Added Items Section --- */}
+            <div className="bg-white shadow-md rounded-lg p-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">Recently Added Medicines</h2>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
                             <tr>
-                                <th className="text-left p-3 font-semibold text-gray-600">Product Name</th>
-                                <th className="text-left p-3 font-semibold text-gray-600">Batch No.</th>
-                                <th className="text-right p-3 font-semibold text-gray-600">Stock Qty</th>
-                                <th className="text-right p-3 font-semibold text-gray-600">MRP</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {recentItems.map((item) => (
-                                <tr key={item.id} className="border-b hover:bg-gray-50">
-                                    <td className="p-3">{item.name}</td>
-                                    <td className="p-3">{item.batch}</td>
-                                    <td className="p-3 text-right">{item.stock}</td>
-                                    <td className="p-3 text-right">₹{item.price.toFixed(2)}</td>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {stats?.recentMedicines?.length > 0 ? (
+                                stats.recentMedicines.map(item => (
+                                    <tr key={item.id}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{item.price.toFixed(2)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.stock}</td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="3" className="text-center py-10 text-gray-500">No recent items to display.</td>
                                 </tr>
-                            ))}
+                            )}
                         </tbody>
                     </table>
                 </div>
