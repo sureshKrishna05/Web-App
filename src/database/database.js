@@ -4,173 +4,127 @@ const { app } = require('electron');
 
 class DatabaseService {
     constructor() {
-        try {
-            const userDataPath = app.getPath('userData');
-            const dbPath = path.join(userDataPath, 'pharmacy.db');
-            
-            this.db = new Database(dbPath);
-            this.db.pragma('journal_mode = WAL'); // Good for performance
-            this.initializeTables();
-        } catch (error) {
-            console.error("Failed to initialize database connection:", error);
-            // If the app cannot run without a DB, it's better to exit.
-            app.quit();
-        }
+        const userDataPath = app.getPath('userData');
+        const dbPath = path.join(userDataPath, 'pharmacy.db');
+        this.db = new Database(dbPath);
+        this.db.pragma('journal_mode = WAL');
+        this.initializeTables();
     }
 
     initializeTables() {
-        // Your table creation logic is excellent and remains unchanged.
+        // --- NEW: Tables for clients and sales reps ---
         this.db.exec(`
-            CREATE TABLE IF NOT EXISTS medicines (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, batch_number TEXT,
-                expiry_date TEXT, price REAL NOT NULL, stock INTEGER NOT NULL DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
+            CREATE TABLE IF NOT EXISTS clients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE
+            );
         `);
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS sales_reps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE
+            );
+        `);
+
+        // --- UPDATED: Invoices table now links to client and rep ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoices (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, patient_name TEXT,
-                total_amount REAL NOT NULL, discount REAL DEFAULT 0, tax REAL DEFAULT 0,
-                final_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invoice_number TEXT UNIQUE NOT NULL,
+                client_id INTEGER,
+                sales_rep_id INTEGER,
+                total_amount REAL NOT NULL,
+                tax REAL DEFAULT 0,
+                final_amount REAL NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (client_id) REFERENCES clients (id),
+                FOREIGN KEY (sales_rep_id) REFERENCES sales_reps (id)
             )
         `);
+
+        // --- UPDATED: Invoice items table now includes PTR and free quantity ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoice_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL, medicine_id INTEGER NOT NULL,
-                quantity INTEGER NOT NULL, unit_price REAL NOT NULL, total_price REAL NOT NULL,
-                FOREIGN KEY (invoice_id) REFERENCES invoices (id), FOREIGN KEY (medicine_id) REFERENCES medicines (id)
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invoice_id INTEGER NOT NULL,
+                medicine_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL,
+                free_quantity INTEGER DEFAULT 0,
+                unit_price REAL NOT NULL,
+                ptr REAL,
+                total_price REAL NOT NULL,
+                FOREIGN KEY (invoice_id) REFERENCES invoices (id),
+                FOREIGN KEY (medicine_id) REFERENCES medicines (id)
             )
         `);
-        this.db.exec(`
-            CREATE INDEX IF NOT EXISTS idx_medicines_name ON medicines(name);
-            CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);
-            CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
-        `);
+        
+        this.db.exec(`CREATE TABLE IF NOT EXISTS medicines (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, batch_number TEXT, expiry_date TEXT, price REAL NOT NULL, stock INTEGER NOT NULL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+        this.db.exec(`CREATE INDEX IF NOT EXISTS idx_medicines_name ON medicines(name);`);
         console.log('Database tables initialized successfully');
     }
 
-    // --- General Query Runner with Error Handling ---
-    run(query, params) {
-        try {
-            return query.run(params);
-        } catch (error) {
-            console.error('DB Run Error:', error.message);
-            throw error; // Re-throw to be caught by IPC handler
+    // --- NEW: Methods for Clients and Sales Reps ---
+    getAllClients() {
+        return this.db.prepare('SELECT * FROM clients ORDER BY name').all();
+    }
+    addClient(name) {
+        const stmt = this.db.prepare('INSERT INTO clients (name) VALUES (?)');
+        const result = stmt.run(name);
+        return { id: result.lastInsertRowid, name };
+    }
+    getAllSalesReps() {
+        const reps = this.db.prepare('SELECT * FROM sales_reps ORDER BY name').all();
+        if (reps.length === 0) {
+            this.db.prepare("INSERT INTO sales_reps (name) VALUES ('Mr. John'), ('Ms. Jane')").run();
+            return this.db.prepare('SELECT * FROM sales_reps ORDER BY name').all();
         }
+        return reps;
     }
 
-    get(query, params) {
-        try {
-            return query.get(params);
-        } catch (error) {
-            console.error('DB Get Error:', error.message);
-            throw error;
-        }
-    }
-
-    all(query, params) {
-        try {
-            return query.all(params);
-        } catch (error) {
-            console.error('DB All Error:', error.message);
-            throw error;
-        }
-    }
-
-    // --- Medicine Operations ---
-    getAllMedicines() {
-        const stmt = this.db.prepare('SELECT * FROM medicines ORDER BY name');
-        return this.all(stmt);
-    }
-    
-    searchMedicines(searchTerm) {
-        const stmt = this.db.prepare('SELECT * FROM medicines WHERE name LIKE ? ORDER BY name');
-        return this.all(stmt, `%${searchTerm}%`);
-    }
-
-    addMedicine(medicine) {
-        const stmt = this.db.prepare(`
-            INSERT INTO medicines (name, batch_number, expiry_date, price, stock)
-            VALUES (@name, @batch_number, @expiry_date, @price, @stock)
-        `);
-        const result = this.run(stmt, medicine);
-        return { id: result.lastInsertRowid, ...medicine };
-    }
-
-    updateMedicine(id, medicine) {
-        const stmt = this.db.prepare(`
-            UPDATE medicines SET name = @name, batch_number = @batch_number, expiry_date = @expiry_date, 
-            price = @price, stock = @stock, updated_at = CURRENT_TIMESTAMP WHERE id = @id
-        `);
-        const result = this.run(stmt, { id, ...medicine });
-        return result.changes > 0;
-    }
-
-    deleteMedicine(id) {
-        const stmt = this.db.prepare('DELETE FROM medicines WHERE id = ?');
-        const result = this.run(stmt, id);
-        return result.changes > 0;
-    }
-
-    // --- Invoice Operations ---
+    // --- UPDATED: createInvoice method ---
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
+            const clientStmt = this.db.prepare('SELECT id FROM clients WHERE name = ?');
+            let client = clientStmt.get(invoice.client_name);
+            if (!client && invoice.client_name) {
+                client = this.addClient(invoice.client_name);
+            }
+
             const invoiceStmt = this.db.prepare(`
-                INSERT INTO invoices (invoice_number, patient_name, total_amount, discount, tax, final_amount)
-                VALUES (@invoice_number, @patient_name, @total_amount, @discount, @tax, @final_amount)
+                INSERT INTO invoices (invoice_number, client_id, sales_rep_id, total_amount, tax, final_amount)
+                VALUES (@invoice_number, @client_id, @sales_rep_id, @total_amount, @tax, @final_amount)
             `);
-            const invoiceResult = this.run(invoiceStmt, invoice);
+            const invoiceResult = invoiceStmt.run({
+                ...invoice,
+                client_id: client ? client.id : null,
+            });
             const invoiceId = invoiceResult.lastInsertRowid;
 
             const itemStmt = this.db.prepare(`
-                INSERT INTO invoice_items (invoice_id, medicine_id, quantity, unit_price, total_price)
-                VALUES (@invoice_id, @medicine_id, @quantity, @unit_price, @total_price)
+                INSERT INTO invoice_items (invoice_id, medicine_id, quantity, free_quantity, unit_price, ptr, total_price)
+                VALUES (@invoice_id, @medicine_id, @quantity, @free_quantity, @unit_price, @ptr, @total_price)
             `);
-            const stockStmt = this.db.prepare('UPDATE medicines SET stock = stock - @quantity WHERE id = @medicine_id');
+            const stockStmt = this.db.prepare('UPDATE medicines SET stock = stock - @total_deduction WHERE id = @medicine_id');
 
             for (const item of invoice.items) {
-                this.run(itemStmt, { invoice_id: invoiceId, ...item });
-                this.run(stockStmt, { quantity: item.quantity, medicine_id: item.medicine_id });
+                itemStmt.run({ invoice_id: invoiceId, ...item });
+                const total_deduction = item.quantity + (item.free_quantity || 0);
+                stockStmt.run({ total_deduction, medicine_id: item.medicine_id });
             }
             return invoiceId;
         });
         return transaction(invoiceData);
     }
-
-    getAllInvoices() {
-        const stmt = this.db.prepare('SELECT * FROM invoices ORDER BY created_at DESC');
-        return this.all(stmt);
-    }
-
-    // --- Dashboard & Utility ---
-    getDashboardStats() {
-        const totalMedicines = this.get(this.db.prepare('SELECT COUNT(*) as count FROM medicines')).count;
-        const lowStockItems = this.get(this.db.prepare('SELECT COUNT(*) as count FROM medicines WHERE stock < 10')).count;
-        const totalInvoices = this.get(this.db.prepare('SELECT COUNT(*) as count FROM invoices')).count;
-        const recentMedicines = this.all(this.db.prepare('SELECT * FROM medicines ORDER BY created_at DESC LIMIT 5'));
-        return { totalMedicines, lowStockItems, totalInvoices, recentMedicines };
-    }
     
-    // --- THIS IS THE CORRECTED METHOD ---
-    generateInvoiceNumber() {
-        const date = new Date();
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        
-        // **FIX**: Changed "now" to 'now' to use a string literal in SQL
-        const stmt = this.db.prepare("SELECT COUNT(*) as count FROM invoices WHERE DATE(created_at) = DATE('now')");
-        const todayCount = this.get(stmt).count + 1;
-        
-        return `INV-${year}${month}${day}-${String(todayCount).padStart(3, '0')}`;
-    }
-
-    close() {
-        if (this.db) {
-            this.db.close();
-            console.log('Database connection closed.');
-        }
-    }
+    // --- Other existing methods ---
+    getAllMedicines() { return this.db.prepare('SELECT * FROM medicines ORDER BY name').all(); }
+    searchMedicines(searchTerm) { return this.db.prepare('SELECT * FROM medicines WHERE name LIKE ? ORDER BY name').all(`%${searchTerm}%`); }
+    addMedicine(medicine) { const result = this.db.prepare(`INSERT INTO medicines (name, batch_number, expiry_date, price, stock) VALUES (?, ?, ?, ?, ?)`).run(medicine.name, medicine.batch_number, medicine.expiry_date, medicine.price, medicine.stock); return { id: result.lastInsertRowid }; }
+    updateMedicine(id, medicine) { return this.db.prepare(`UPDATE medicines SET name = ?, batch_number = ?, expiry_date = ?, price = ?, stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(medicine.name, medicine.batch_number, medicine.expiry_date, medicine.price, medicine.stock, id).changes > 0; }
+    deleteMedicine(id) { return this.db.prepare('DELETE FROM medicines WHERE id = ?').run(id).changes > 0; }
+    getDashboardStats() { const totalMedicines = this.db.prepare('SELECT COUNT(*) as count FROM medicines').get().count; const lowStockItems = this.db.prepare('SELECT COUNT(*) as count FROM medicines WHERE stock < 10').get().count; const totalInvoices = this.db.prepare('SELECT COUNT(*) as count FROM invoices').get().count; const recentMedicines = this.db.prepare('SELECT * FROM medicines ORDER BY created_at DESC LIMIT 5').all(); return { totalMedicines, lowStockItems, totalInvoices, recentMedicines }; }
+    generateInvoiceNumber() { const date = new Date(); const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); const todayCount = this.db.prepare("SELECT COUNT(*) as count FROM invoices WHERE DATE(created_at) = DATE('now')").get().count + 1; return `INV-${year}${month}${day}-${String(todayCount).padStart(3, '0')}`; }
+    close() { this.db.close(); }
 }
 
 module.exports = DatabaseService;
