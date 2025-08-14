@@ -30,20 +30,25 @@ function createWindow() {
 function setupDatabaseHandlers() {
   if (!db) return;
 
-  // --- Medicine Handlers ---
+  // --- NEW IPC HANDLERS for Parties ---
+  ipcMain.handle('get-all-parties', () => db.getAllParties());
+  ipcMain.handle('add-party', (event, party) => db.addParty(party));
+  ipcMain.handle('update-party', (event, id, party) => db.updateParty(id, party));
+  ipcMain.handle('delete-party', (event, id) => db.deleteParty(id));
+  
+  // --- Existing Handlers ---
   ipcMain.handle('get-all-medicines', () => db.getAllMedicines());
   ipcMain.handle('search-medicines', (event, searchTerm) => db.searchMedicines(searchTerm));
   ipcMain.handle('add-medicine', (event, medicine) => db.addMedicine(medicine));
   ipcMain.handle('update-medicine', (event, id, medicine) => db.updateMedicine(id, medicine));
   ipcMain.handle('delete-medicine', (event, id) => db.deleteMedicine(id));
-
-  // --- Invoice Handlers ---
   ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));
   ipcMain.handle('get-all-invoices', () => db.getAllInvoices());
   ipcMain.handle('generate-invoice-number', () => db.generateInvoiceNumber());
-
-  // --- Dashboard Handlers ---
   ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());
+  // Added handlers for clients and sales reps for the billing page
+  ipcMain.handle('get-all-clients', () => db.getAllClients());
+  ipcMain.handle('get-all-sales-reps', () => db.getAllSalesReps());
 }
 
 app.whenReady().then(() => {

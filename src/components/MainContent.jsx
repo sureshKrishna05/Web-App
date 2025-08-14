@@ -4,6 +4,7 @@ import SettingsPage from '../pages/SettingsPage';
 import ItemsPage from '../pages/ItemsPage'; 
 import BillingPage from '../pages/BillingPage';
 import PlaceholderPage from '../pages/PlaceholderPage';
+import PartiesPage from '../pages/PartiesPage';
 
 const MainContent = ({ page }) => {
     const renderPage = () => {
@@ -16,6 +17,8 @@ const MainContent = ({ page }) => {
                 return <ItemsPage />;
             case 'Billing':
                     return <BillingPage />;
+            case 'Parties':
+                    return <PartiesPage />;
             default:
                 // All other pages will still use the placeholder for now
                 return <PlaceholderPage pageName={page} />;

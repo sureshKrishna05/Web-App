@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// A helper component for the printable invoice. This contains the print layout.
+// (Your PrintableBill component can remain unchanged)
 const PrintableBill = React.forwardRef(({ billItems, clientName, invoiceNumber, totals }, ref) => {
     return (
         <div ref={ref} className="hidden print:block p-10">
@@ -62,18 +62,20 @@ const PrintableBill = React.forwardRef(({ billItems, clientName, invoiceNumber, 
 
 
 const BillingPage = () => {
-    // --- STATE FOR NEW FEATURES ---
-    const [clients, setClients] = useState([]);
+    // --- State for new client features ---
+    const [isNewClient, setIsNewClient] = useState(false);
+    const [newClientDetails, setNewClientDetails] = useState({ phone: '', address: '', GSTIN: '' });
+    const [clientSuggestions, setClientSuggestions] = useState([]);
+    
+    // --- State for existing features ---
     const [salesReps, setSalesReps] = useState([]);
     const [clientName, setClientName] = useState('');
     const [salesRepId, setSalesRepId] = useState('');
     const [gstRate, setGstRate] = useState(5);
     const [ptr, setPtr] = useState('');
     const [freeQuantity, setFreeQuantity] = useState('');
-
-    // --- EXISTING STATE ---
     const [searchQuery, setSearchQuery] = useState('');
-    const [suggestions, setSuggestions] = useState([]);
+    const [medicineSuggestions, setMedicineSuggestions] = useState([]);
     const [selectedMedicine, setSelectedMedicine] = useState(null);
     const [quantity, setQuantity] = useState(1);
     const [billItems, setBillItems] = useState([]);
@@ -83,35 +85,67 @@ const BillingPage = () => {
     const printableComponentRef = useRef();
     const quantityInputRef = useRef();
 
-    // --- DATA FETCHING EFFECTS ---
+    // --- Data Fetching ---
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const fetchedClients = await window.electronAPI.getAllClients();
-                const fetchedReps = await window.electronAPI.getAllSalesReps();
-                setClients(fetchedClients);
-                setSalesReps(fetchedReps);
-            } catch (error) {
-                console.error("Failed to fetch initial data:", error);
-            }
+        const fetchReps = async () => {
+            const fetchedReps = await window.electronAPI.getAllSalesReps();
+            setSalesReps(fetchedReps);
         };
-        fetchData();
+        fetchReps();
     }, []);
 
     const fetchInvoiceNumber = useCallback(async () => {
-        try {
-            const newInvoiceNum = await window.electronAPI.generateInvoiceNumber();
-            setInvoiceNumber(newInvoiceNum);
-        } catch (error) {
-            console.error("Failed to generate invoice number:", error);
-        }
+        const newInvoiceNum = await window.electronAPI.generateInvoiceNumber();
+        setInvoiceNumber(newInvoiceNum);
     }, []);
 
     useEffect(() => {
         fetchInvoiceNumber();
     }, [fetchInvoiceNumber]);
+    
+    // --- Client Search Logic ---
+    const handleClientSearch = useCallback(async (query) => {
+        setClientName(query);
+        if (query.length > 0) {
+            const results = await window.electronAPI.searchParties(query);
+            setClientSuggestions(results);
+            const exactMatch = results.find(c => c.name.toLowerCase() === query.toLowerCase());
+            setIsNewClient(!exactMatch);
+        } else {
+            setClientSuggestions([]);
+            setIsNewClient(false);
+        }
+    }, []);
 
-    // --- CALCULATION EFFECT ---
+    const handleSelectClient = (name) => {
+        setClientName(name);
+        setClientSuggestions([]);
+        setIsNewClient(false);
+    };
+
+    // --- New Client Details Handler ---
+    const handleNewClientChange = (e) => {
+        const { name, value } = e.target;
+        setNewClientDetails(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSaveNewClient = async () => {
+        if (!clientName) {
+            alert("Please enter a name for the new client.");
+            return;
+        }
+        try {
+            const newParty = { name: clientName, ...newClientDetails };
+            await window.electronAPI.addParty(newParty);
+            alert(`Client "${clientName}" saved successfully!`);
+            setIsNewClient(false);
+        } catch (error) {
+            console.error("Failed to save new client:", error);
+            alert("Failed to save client. A client with this name may already exist.");
+        }
+    };
+    
+    // --- Other Handlers & Effects ---
     useEffect(() => {
         const subtotal = billItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         const tax = subtotal * (gstRate / 100);
@@ -119,94 +153,63 @@ const BillingPage = () => {
         setTotals({ subtotal, tax, finalAmount, gstRate });
     }, [billItems, gstRate]);
 
-    // --- EVENT HANDLERS ---
-    const handleSearch = useCallback(async (query) => {
+    const handleMedicineSearch = useCallback(async (query) => {
         setSearchQuery(query);
         if (query.length > 0) {
             const results = await window.electronAPI.searchMedicines(query);
-            setSuggestions(results);
+            setMedicineSuggestions(results);
         } else {
-            setSuggestions([]);
+            setMedicineSuggestions([]);
         }
     }, []);
 
-    const handleSelectSuggestion = (med) => {
+    const handleSelectMedicine = (med) => {
         setSelectedMedicine(med);
         setSearchQuery(med.name);
-        setSuggestions([]);
+        setMedicineSuggestions([]);
         quantityInputRef.current?.focus();
     };
 
     const handleAddItem = () => {
         if (!selectedMedicine || !quantity || Number(quantity) < 0) {
-            alert("Please select a valid medicine and quantity.");
-            return;
+            alert("Please select a valid medicine and quantity."); return;
         }
         const totalStockNeeded = Number(quantity) + Number(freeQuantity || 0);
         if (totalStockNeeded > selectedMedicine.stock) {
-            alert(`Cannot add item. Only ${selectedMedicine.stock} units are in stock.`);
-            return;
+            alert(`Cannot add item. Only ${selectedMedicine.stock} units are in stock.`); return;
         }
-
-        const newItem = {
-            ...selectedMedicine,
-            quantity: Number(quantity),
-            free_quantity: Number(freeQuantity || 0),
-            ptr: Number(ptr || 0),
-        };
-
+        const newItem = { ...selectedMedicine, quantity: Number(quantity), free_quantity: Number(freeQuantity || 0), ptr: Number(ptr || 0) };
         setBillItems(prevItems => [...prevItems, newItem]);
-
-        // Reset item-specific fields for the next entry
-        setSearchQuery('');
-        setSelectedMedicine(null);
-        setQuantity(1);
-        setFreeQuantity('');
-        setPtr('');
+        setSearchQuery(''); setSelectedMedicine(null); setQuantity(1); setFreeQuantity(''); setPtr('');
     };
 
-    const handleRemoveItem = (itemId) => {
-        setBillItems(prevItems => prevItems.filter((item, index) => index !== itemId));
+    const handleRemoveItem = (indexToRemove) => {
+        setBillItems(prevItems => prevItems.filter((_, index) => index !== indexToRemove));
     };
 
     const resetForm = useCallback(async () => {
-        setClientName('');
-        setSalesRepId('');
-        setBillItems([]);
-        setGstRate(5);
+        setClientName(''); setSalesRepId(''); setBillItems([]); setGstRate(5); setIsNewClient(false); setNewClientDetails({ phone: '', address: '', GSTIN: '' });
         fetchInvoiceNumber();
     }, [fetchInvoiceNumber]);
 
     const handleSaveInvoice = async () => {
         if (billItems.length === 0 || !clientName) {
-            alert("Please enter a client name and add at least one item to the invoice.");
-            return;
+            alert("Please enter a client name and add items."); return;
         }
         const invoiceData = {
-            invoice_number: invoiceNumber,
-            client_name: clientName,
-            sales_rep_id: salesRepId,
-            total_amount: totals.subtotal,
-            tax: totals.tax,
-            final_amount: totals.finalAmount,
+            invoice_number: invoiceNumber, party_name: clientName, sales_rep_id: salesRepId,
+            total_amount: totals.subtotal, tax: totals.tax, final_amount: totals.finalAmount,
             items: billItems.map(item => ({
-                medicine_id: item.id,
-                quantity: item.quantity,
-                free_quantity: item.free_quantity,
-                unit_price: item.price,
-                ptr: item.ptr,
-                total_price: item.price * item.quantity
+                medicine_id: item.id, quantity: item.quantity, free_quantity: item.free_quantity,
+                unit_price: item.price, ptr: item.ptr, total_price: item.price * item.quantity
             }))
         };
-        
         try {
             await window.electronAPI.createInvoice(invoiceData);
             alert(`Invoice ${invoiceNumber} saved successfully!`);
-            handlePrint();
-            resetForm();
+            handlePrint(); resetForm();
         } catch (error) {
-            console.error("Failed to save invoice:", error);
-            alert("Error saving invoice. Check console for details.");
+            console.error("Failed to save invoice:", error); alert("Error saving invoice.");
         }
     };
 
@@ -216,23 +219,21 @@ const BillingPage = () => {
         printWindow.document.write(`<html><head><title>Print Invoice</title><script src="https://cdn.tailwindcss.com"></script></head><body>${printContent}</body></html>`);
         printWindow.document.close();
         printWindow.focus();
-        setTimeout(() => { 
-            printWindow.print();
-            printWindow.close();
-        }, 250);
+        setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
     };
 
     return (
         <div className="p-6 bg-[#E9E9E9] h-full">
-            <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-md p-6">
-                {/* --- Top section with Client, Sales Rep, and GST --- */}
+            <div className="bg-white rounded-lg shadow-md p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <div>
+                    <div className="relative">
                         <label className="block text-sm font-medium text-gray-700">Select or Enter Client Name</label>
-                        <input list="client-list" value={clientName} onChange={(e) => setClientName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-                        <datalist id="client-list">
-                            {clients.map(client => <option key={client.id} value={client.name} />)}
-                        </datalist>
+                        <input type="text" value={clientName} onChange={(e) => handleClientSearch(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        {clientSuggestions.length > 0 && (
+                            <div className="absolute z-20 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
+                                {clientSuggestions.map(client => <div key={client.id} onClick={() => handleSelectClient(client.name)} className="p-2 hover:bg-gray-100 cursor-pointer">{client.name}</div>)}
+                            </div>
+                        )}
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Sales Representative</label>
@@ -247,35 +248,42 @@ const BillingPage = () => {
                     </div>
                 </div>
 
-                {/* --- Item entry row with PTR and Free quantity --- */}
+                {isNewClient && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6 p-4 border border-blue-200 rounded-lg bg-blue-50 transition-all duration-300">
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700">Address</label>
+                            <input type="text" name="address" value={newClientDetails.address} onChange={handleNewClientChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Contact No</label>
+                            <input type="text" name="phone" value={newClientDetails.phone} onChange={handleNewClientChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        </div>
+                        <div>
+                           <label className="block text-sm font-medium text-gray-700">GSTIN</label>
+                           <input type="text" name="GSTIN" value={newClientDetails.GSTIN} onChange={handleNewClientChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        </div>
+                        <div className="col-span-full text-right">
+                           <button onClick={handleSaveNewClient} className="bg-blue-600 text-white py-2 px-4 rounded-md shadow">Save New Client</button>
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-12 gap-4 items-end border-t pt-6">
                     <div className="col-span-4 relative">
                         <label className="block text-sm font-medium text-gray-700">Select Medicine</label>
-                        <input type="text" value={searchQuery} onChange={(e) => handleSearch(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" autoComplete="off" />
-                        {suggestions.length > 0 && (
+                        <input type="text" value={searchQuery} onChange={(e) => handleMedicineSearch(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" autoComplete="off" />
+                        {medicineSuggestions.length > 0 && (
                             <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
-                                {suggestions.map(med => <div key={med.id} onClick={() => handleSelectSuggestion(med)} className="p-2 hover:bg-gray-100 cursor-pointer">{med.name} (Stock: {med.stock})</div>)}
+                                {medicineSuggestions.map(med => <div key={med.id} onClick={() => handleSelectMedicine(med)} className="p-2 hover:bg-gray-100 cursor-pointer">{med.name} (Stock: {med.stock})</div>)}
                             </div>
                         )}
                     </div>
-                    <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700">P.T.R.</label>
-                        <input type="number" value={ptr} onChange={(e) => setPtr(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-                    </div>
-                    <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700">Quantity</label>
-                        <input ref={quantityInputRef} type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} min="1" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-                    </div>
-                    <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700">Free</label>
-                        <input type="number" value={freeQuantity} onChange={(e) => setFreeQuantity(e.target.value)} min="0" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-                    </div>
-                    <div className="col-span-2">
-                        <button onClick={handleAddItem} className="w-full bg-green-600 text-white py-2 px-4 rounded-md shadow">Add to Invoice</button>
-                    </div>
+                    <div className="col-span-2"><label className="block text-sm font-medium text-gray-700">P.T.R.</label><input type="number" value={ptr} onChange={(e) => setPtr(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
+                    <div className="col-span-2"><label className="block text-sm font-medium text-gray-700">Quantity</label><input ref={quantityInputRef} type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} min="1" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
+                    <div className="col-span-2"><label className="block text-sm font-medium text-gray-700">Free</label><input type="number" value={freeQuantity} onChange={(e) => setFreeQuantity(e.target.value)} min="0" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
+                    <div className="col-span-2"><button onClick={handleAddItem} className="w-full bg-green-600 text-white py-2 px-4 rounded-md shadow">Add to Invoice</button></div>
                 </div>
 
-                {/* --- Invoice Items Table --- */}
                 <div className="mt-6">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
@@ -283,7 +291,6 @@ const BillingPage = () => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Medicine</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Free</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PTR</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rate</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Action</th>
@@ -295,7 +302,6 @@ const BillingPage = () => {
                                     <td className="px-6 py-4 whitespace-nowrap">{item.name}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{item.quantity}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{item.free_quantity}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">₹{item.ptr.toFixed(2)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">₹{item.price.toFixed(2)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right">₹{(item.price * item.quantity).toFixed(2)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right">
@@ -307,7 +313,6 @@ const BillingPage = () => {
                     </table>
                 </div>
 
-                {/* --- Totals and Save Button --- */}
                 <div className="flex justify-end mt-6 pt-6 border-t">
                     <div className="w-full max-w-sm space-y-2">
                          <div className="flex justify-between"><span className="font-medium">Subtotal:</span><span>₹{totals.subtotal.toFixed(2)}</span></div>

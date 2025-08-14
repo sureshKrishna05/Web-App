@@ -5,6 +5,7 @@ import DashboardPage from './pages/DashboardPage';
 //import SettingsPage from './pages/SettingsPage';
 import ItemsPage from './pages/ItemsPage';
 import BillingPage from './pages/BillingPage';
+import PartiesPage from './pages/PartiesPage';
 //import PlaceholderPage from './pages/PlaceholderPage';
 
 // --- Icon Components (No change) ---
@@ -76,6 +77,7 @@ const MainContent = ({ page }) => {
             case 'Settings': return <SettingsPage />;
             case 'Items': return <ItemsPage />;
             case 'New Invoice': return <BillingPage />;
+            case 'Parties': return <PartiesPage />;
             default: return <PlaceholderPage pageName={page} />;
         }
     };
