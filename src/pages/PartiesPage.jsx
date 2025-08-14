@@ -2,13 +2,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 // --- Reusable Modal for Add/Edit Party ---
 const PartyModal = ({ isOpen, onClose, onSave, item }) => {
-    const [formData, setFormData] = useState({ name: '', phone: '', address: '' });
+    const [formData, setFormData] = useState({ name: '', phone: '', address: '', gstin: '' });
 
     useEffect(() => {
         if (item) {
-            setFormData({ name: item.name, phone: item.phone || '', address: item.address || '' });
+            setFormData({
+                name: item.name,
+                phone: item.phone || '',
+                address: item.address || '',
+                gstin: item.gstin || ''
+            });
         } else {
-            setFormData({ name: '', phone: '', address: '' });
+            setFormData({ name: '', phone: '', address: '', gstin: '' });
         }
     }, [item, isOpen]);
 
@@ -45,6 +50,10 @@ const PartyModal = ({ isOpen, onClose, onSave, item }) => {
                         <label className="block text-sm font-medium">Address</label>
                         <textarea name="address" value={formData.address} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                     </div>
+                    <div>
+                        <label className="block text-sm font-medium">GSTIN</label>
+                        <input type="text" name="gstin" value={formData.gstin} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                    </div>
                     <div className="flex justify-end space-x-4 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md">Cancel</button>
                         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md">{item ? 'Update' : 'Save'}</button>
@@ -54,7 +63,6 @@ const PartyModal = ({ isOpen, onClose, onSave, item }) => {
         </div>
     );
 };
-
 
 const PartiesPage = () => {
     const [parties, setParties] = useState([]);
@@ -134,6 +142,7 @@ const PartiesPage = () => {
                             <th className="text-left p-3 font-semibold">Name</th>
                             <th className="text-left p-3 font-semibold">Phone</th>
                             <th className="text-left p-3 font-semibold">Address</th>
+                            <th className="text-left p-3 font-semibold">GSTIN</th>
                             <th className="text-center p-3 font-semibold">Actions</th>
                         </tr>
                     </thead>
@@ -143,6 +152,7 @@ const PartiesPage = () => {
                                 <td className="p-3">{party.name}</td>
                                 <td className="p-3">{party.phone}</td>
                                 <td className="p-3">{party.address}</td>
+                                <td className="p-3">{party.gstin}</td>
                                 <td className="p-3 text-center">
                                     <button onClick={() => handleOpenModal(party)} className="text-blue-600 hover:underline mr-4">Edit</button>
                                     <button onClick={() => handleDelete(party.id)} className="text-red-600 hover:underline">Delete</button>

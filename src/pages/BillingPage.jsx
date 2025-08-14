@@ -129,21 +129,43 @@ const BillingPage = () => {
         setNewClientDetails(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleSaveNewClient = async () => {
-        if (!clientName) {
-            alert("Please enter a name for the new client.");
-            return;
-        }
-        try {
-            const newParty = { name: clientName, ...newClientDetails };
-            await window.electronAPI.addParty(newParty);
-            alert(`Client "${clientName}" saved successfully!`);
-            setIsNewClient(false);
-        } catch (error) {
-            console.error("Failed to save new client:", error);
-            alert("Failed to save client. A client with this name may already exist.");
-        }
-    };
+const handleSaveNewClient = async () => {
+    if (!clientName?.trim()) {
+        alert("Please enter a name for the new client.");
+        return;
+    }
+    if (!newClientDetails.address?.trim()) {
+        alert("Please enter the address.");
+        return;
+    }
+    if (!newClientDetails.phone?.trim()) {
+        alert("Please enter the contact number.");
+        return;
+    }
+    if (!newClientDetails.GSTIN?.trim()) {
+        alert("Please enter the GSTIN.");
+        return;
+    }
+
+    try {
+        // Map frontend state to backend format
+        const newParty = {
+            name: clientName.trim(),
+            address: newClientDetails.address.trim(),
+            phone: newClientDetails.phone.trim(),
+            gstin: newClientDetails.GSTIN.trim(), // lowercase key
+        };
+
+        console.log("Sending party data:", newParty); // Debug check
+        await window.electronAPI.addParty(newParty);
+
+        alert(`Client "${clientName}" saved successfully!`);
+        setIsNewClient(false);
+    } catch (error) {
+        console.error("Failed to save new client:", error);
+        alert(error.message || "Failed to save client. A client with this name may already exist.");
+    }
+};
     
     // --- Other Handlers & Effects ---
     useEffect(() => {

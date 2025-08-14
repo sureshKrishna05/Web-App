@@ -30,25 +30,71 @@ function createWindow() {
 function setupDatabaseHandlers() {
   if (!db) return;
 
-  // --- NEW IPC HANDLERS for Parties ---
+  // --- Parties Handlers ---
   ipcMain.handle('get-all-parties', () => db.getAllParties());
-  ipcMain.handle('add-party', (event, party) => db.addParty(party));
-  ipcMain.handle('update-party', (event, id, party) => db.updateParty(id, party));
-  ipcMain.handle('delete-party', (event, id) => db.deleteParty(id));
-  
-  // --- Existing Handlers ---
+
+  ipcMain.handle('add-party', (event, party) => {
+    if (!party.name?.trim()) throw new Error('Party name is required');
+    if (!party.phone?.trim()) throw new Error('Party contact number is required');
+    if (!party.address?.trim()) throw new Error('Party address is required');
+    if (!party.gstin?.trim()) throw new Error('GSTIN is required');
+    return db.addParty(party);
+  });
+
+  ipcMain.handle('update-party', (event, id, party) => {
+    if (!id) throw new Error('Party ID is required for update');
+    if (!party.name?.trim()) throw new Error('Party name is required');
+    if (!party.phone?.trim()) throw new Error('Party contact number is required');
+    if (!party.address?.trim()) throw new Error('Party address is required');
+    if (!party.gstin?.trim()) throw new Error('GSTIN is required');
+    return db.updateParty(id, party);
+  });
+
+  ipcMain.handle('delete-party', (event, id) => {
+    if (!id) throw new Error('Party ID is required for deletion');
+    return db.deleteParty(id);
+  });
+
+  ipcMain.handle('search-parties', (event, searchTerm) => db.searchParties(searchTerm));
+
+  // --- Clients Handlers ---
+  ipcMain.handle('get-all-clients', () => db.getAllClients());
+  ipcMain.handle('add-client', (event, name) => {
+    if (!name?.trim()) throw new Error('Client name is required');
+    return db.addClient(name);
+  });
+
+  // --- Sales Reps ---
+  ipcMain.handle('get-all-sales-reps', () => db.getAllSalesReps());
+
+  // --- Medicines Handlers ---
   ipcMain.handle('get-all-medicines', () => db.getAllMedicines());
   ipcMain.handle('search-medicines', (event, searchTerm) => db.searchMedicines(searchTerm));
-  ipcMain.handle('add-medicine', (event, medicine) => db.addMedicine(medicine));
-  ipcMain.handle('update-medicine', (event, id, medicine) => db.updateMedicine(id, medicine));
-  ipcMain.handle('delete-medicine', (event, id) => db.deleteMedicine(id));
+  ipcMain.handle('add-medicine', (event, medicine) => {
+    if (!medicine.name?.trim()) throw new Error('Medicine name is required');
+    if (medicine.price == null || isNaN(medicine.price)) throw new Error('Valid price is required');
+    if (medicine.stock == null || isNaN(medicine.stock)) throw new Error('Valid stock quantity is required');
+    return db.addMedicine(medicine);
+  });
+  ipcMain.handle('update-medicine', (event, id, medicine) => {
+    if (!id) throw new Error('Medicine ID is required for update');
+    if (!medicine.name?.trim()) throw new Error('Medicine name is required');
+    if (medicine.price == null || isNaN(medicine.price)) throw new Error('Valid price is required');
+    if (medicine.stock == null || isNaN(medicine.stock)) throw new Error('Valid stock quantity is required');
+    return db.updateMedicine(id, medicine);
+  });
+  ipcMain.handle('delete-medicine', (event, id) => {
+    if (!id) throw new Error('Medicine ID is required for deletion');
+    return db.deleteMedicine(id);
+  });
+
+  // --- Invoices ---
   ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));
-  ipcMain.handle('get-all-invoices', () => db.getAllInvoices());
+
+  // --- Misc ---
+  ipcMain.handle('get-all-invoices', () => db.getAllInvoices?.() || []);
   ipcMain.handle('generate-invoice-number', () => db.generateInvoiceNumber());
   ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());
-  // Added handlers for clients and sales reps for the billing page
-  ipcMain.handle('get-all-clients', () => db.getAllClients());
-  ipcMain.handle('get-all-sales-reps', () => db.getAllSalesReps());
 }
 
 app.whenReady().then(() => {

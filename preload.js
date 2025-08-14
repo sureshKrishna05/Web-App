@@ -1,11 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // --- NEWLY EXPOSED FUNCTIONS for Parties ---
+  // --- Parties Functions ---
   getAllParties: () => ipcRenderer.invoke('get-all-parties'),
   addParty: (party) => ipcRenderer.invoke('add-party', party),
   updateParty: (id, party) => ipcRenderer.invoke('update-party', id, party),
   deleteParty: (id) => ipcRenderer.invoke('delete-party', id),
+  // --- NEW: Exposed function for searching parties ---
+  searchParties: (searchTerm) => ipcRenderer.invoke('search-parties', searchTerm),
 
   // --- Existing Functions ---
   getAllClients: () => ipcRenderer.invoke('get-all-clients'),
