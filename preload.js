@@ -1,17 +1,18 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // --- Parties Functions ---
+  // --- NEWLY EXPOSED FUNCTIONS for Suppliers ---
+  getAllSuppliers: () => ipcRenderer.invoke('get-all-suppliers'),
+  addSupplier: (supplier) => ipcRenderer.invoke('add-supplier', supplier),
+  updateSupplier: (id, supplier) => ipcRenderer.invoke('update-supplier', id, supplier),
+  deleteSupplier: (id) => ipcRenderer.invoke('delete-supplier', id),
+
+  // --- Existing Functions ---
   getAllParties: () => ipcRenderer.invoke('get-all-parties'),
   addParty: (party) => ipcRenderer.invoke('add-party', party),
   updateParty: (id, party) => ipcRenderer.invoke('update-party', id, party),
   deleteParty: (id) => ipcRenderer.invoke('delete-party', id),
-  // --- NEW: Exposed function for searching parties ---
   searchParties: (searchTerm) => ipcRenderer.invoke('search-parties', searchTerm),
-
-  // --- Existing Functions ---
-  getAllClients: () => ipcRenderer.invoke('get-all-clients'),
-  addClient: (name) => ipcRenderer.invoke('add-client', name),
   getAllSalesReps: () => ipcRenderer.invoke('get-all-sales-reps'),
   getAllMedicines: () => ipcRenderer.invoke('get-all-medicines'),
   searchMedicines: (searchTerm) => ipcRenderer.invoke('search-medicines', searchTerm),

@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import ItemsPage from './pages/ItemsPage';
 import BillingPage from './pages/BillingPage';
 import PartiesPage from './pages/PartiesPage';
+import SuppliersPage from './pages/SuppliersPage';
 //import PlaceholderPage from './pages/PlaceholderPage';
 
 // --- Icon Components (No change) ---
@@ -26,7 +27,7 @@ const navItems = [
     { name: 'Sales', icon: <IconSales />, submenu: [{ name: 'New Invoice' }, { name: 'Sales History' }] },
     { name: 'Purchases', icon: <IconPurchases />, submenu: [{ name: 'New Purchase Bill' }, { name: 'Purchase History' }] },
     { name: 'Items', icon: <IconItems /> },
-    { name: 'Parties', icon: <IconParties /> },
+    { name: 'Connections', icon: <IconParties />, submenu: [{ name: 'Clients'}, {name: 'Suppliers'}]},
     { name: 'Reports', icon: <IconReports /> },
 ];
 
@@ -77,7 +78,8 @@ const MainContent = ({ page }) => {
             case 'Settings': return <SettingsPage />;
             case 'Items': return <ItemsPage />;
             case 'New Invoice': return <BillingPage />;
-            case 'Parties': return <PartiesPage />;
+            case 'Clients': return <PartiesPage />;
+            case 'Suppliers': return <SuppliersPage />;
             default: return <PlaceholderPage pageName={page} />;
         }
     };

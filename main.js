@@ -18,11 +18,9 @@ function createWindow() {
   });
 
   if (isDev) {
-    // Point Electron to Vite dev server
     win.loadURL('http://localhost:5173');
     win.webContents.openDevTools();
   } else {
-    // Load built app
     win.loadFile(path.join(__dirname, 'dist/index.html'));
   }
 }
@@ -30,9 +28,30 @@ function createWindow() {
 function setupDatabaseHandlers() {
   if (!db) return;
 
+  // --- Suppliers Handlers ---
+  ipcMain.handle('get-all-suppliers', () => db.getAllSuppliers());
+  ipcMain.handle('add-supplier', (event, supplier) => {
+    if (!supplier.name?.trim()) throw new Error('Supplier name is required');
+    if (!supplier.phone?.trim()) throw new Error('Supplier contact number is required');
+    if (!supplier.address?.trim()) throw new Error('Supplier address is required');
+    if (!supplier.gstin?.trim()) throw new Error('Supplier GSTIN is required');
+    return db.addSupplier(supplier);
+  });
+  ipcMain.handle('update-supplier', (event, id, supplier) => {
+    if (!id) throw new Error('Supplier ID is required for update');
+    if (!supplier.name?.trim()) throw new Error('Supplier name is required');
+    if (!supplier.phone?.trim()) throw new Error('Supplier contact number is required');
+    if (!supplier.address?.trim()) throw new Error('Supplier address is required');
+    if (!supplier.gstin?.trim()) throw new Error('Supplier GSTIN is required');
+    return db.updateSupplier(id, supplier);
+  });
+  ipcMain.handle('delete-supplier', (event, id) => {
+    if (!id) throw new Error('Supplier ID is required for deletion');
+    return db.deleteSupplier(id);
+  });
+
   // --- Parties Handlers ---
   ipcMain.handle('get-all-parties', () => db.getAllParties());
-
   ipcMain.handle('add-party', (event, party) => {
     if (!party.name?.trim()) throw new Error('Party name is required');
     if (!party.phone?.trim()) throw new Error('Party contact number is required');
@@ -40,7 +59,6 @@ function setupDatabaseHandlers() {
     if (!party.gstin?.trim()) throw new Error('GSTIN is required');
     return db.addParty(party);
   });
-
   ipcMain.handle('update-party', (event, id, party) => {
     if (!id) throw new Error('Party ID is required for update');
     if (!party.name?.trim()) throw new Error('Party name is required');
@@ -49,12 +67,10 @@ function setupDatabaseHandlers() {
     if (!party.gstin?.trim()) throw new Error('GSTIN is required');
     return db.updateParty(id, party);
   });
-
   ipcMain.handle('delete-party', (event, id) => {
     if (!id) throw new Error('Party ID is required for deletion');
     return db.deleteParty(id);
   });
-
   ipcMain.handle('search-parties', (event, searchTerm) => db.searchParties(searchTerm));
 
   // --- Clients Handlers ---

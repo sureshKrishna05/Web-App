@@ -129,8 +129,7 @@ const PartiesPage = () => {
 
     return (
         <div className="p-6 bg-[#E9E9E9] h-full">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-800">Manage Parties</h1>
+            <div className="flex justify-end items-center mb-6">
                 <button onClick={() => handleOpenModal()} className="bg-blue-600 text-white px-6 py-2 rounded-md shadow">
                     Add New Party
                 </button>

@@ -13,7 +13,7 @@ class DatabaseService {
     }
 
     initializeTables() {
-        // Parties table with GSTIN support
+        // Parties table with GSTIN
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS parties (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,10 +25,28 @@ class DatabaseService {
             );
         `);
 
-        // Add GSTIN column if missing (for existing DBs)
-        const columns = this.db.prepare("PRAGMA table_info(parties)").all();
-        if (!columns.find(c => c.name.toLowerCase() === 'gstin')) {
+        // Add GSTIN column if missing
+        const partyCols = this.db.prepare("PRAGMA table_info(parties)").all();
+        if (!partyCols.find(c => c.name.toLowerCase() === 'gstin')) {
             this.db.exec("ALTER TABLE parties ADD COLUMN gstin TEXT;");
+        }
+
+        // Suppliers table with GSTIN
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS suppliers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                phone TEXT,
+                address TEXT,
+                gstin TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Add GSTIN column to suppliers if missing
+        const supplierCols = this.db.prepare("PRAGMA table_info(suppliers)").all();
+        if (!supplierCols.find(c => c.name.toLowerCase() === 'gstin')) {
+            this.db.exec("ALTER TABLE suppliers ADD COLUMN gstin TEXT;");
         }
 
         // Medicines table
@@ -61,7 +79,7 @@ class DatabaseService {
             );
         `);
 
-        // Invoices table (linked to clients)
+        // Invoices table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +95,7 @@ class DatabaseService {
             )
         `);
 
-        // Invoice items table
+        // Invoice items
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoice_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,6 +146,37 @@ class DatabaseService {
         return this.db.prepare('DELETE FROM parties WHERE id = ?').run(id).changes > 0;
     }
 
+    // Suppliers CRUD
+    getAllSuppliers() {
+        return this.db.prepare('SELECT * FROM suppliers ORDER BY name').all();
+    }
+    searchSuppliers(searchTerm) {
+        return this.db.prepare(`
+            SELECT * FROM suppliers 
+            WHERE name LIKE ? OR gstin LIKE ? 
+            ORDER BY name
+        `).all(`%${searchTerm}%`, `%${searchTerm}%`);
+    }
+    addSupplier(supplier) {
+        const stmt = this.db.prepare(`
+            INSERT INTO suppliers (name, phone, address, gstin) 
+            VALUES (@name, @phone, @address, @gstin)
+        `);
+        const result = stmt.run(supplier);
+        return { id: result.lastInsertRowid, ...supplier };
+    }
+    updateSupplier(id, supplier) {
+        const stmt = this.db.prepare(`
+            UPDATE suppliers 
+            SET name = @name, phone = @phone, address = @address, gstin = @gstin 
+            WHERE id = @id
+        `);
+        return stmt.run({ id, ...supplier }).changes > 0;
+    }
+    deleteSupplier(id) {
+        return this.db.prepare('DELETE FROM suppliers WHERE id = ?').run(id).changes > 0;
+    }
+
     // Clients CRUD
     getAllClients() {
         return this.db.prepare('SELECT * FROM clients ORDER BY name').all();
@@ -150,14 +199,11 @@ class DatabaseService {
     // Invoices
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
-            // Get or create client
-            const clientStmt = this.db.prepare('SELECT id FROM clients WHERE name = ?');
-            let client = clientStmt.get(invoice.client_name);
+            let client = this.db.prepare('SELECT id FROM clients WHERE name = ?').get(invoice.client_name);
             if (!client && invoice.client_name) {
                 client = this.addClient(invoice.client_name);
             }
 
-            // Insert invoice
             const invoiceStmt = this.db.prepare(`
                 INSERT INTO invoices (invoice_number, client_id, sales_rep_id, total_amount, tax, final_amount)
                 VALUES (@invoice_number, @client_id, @sales_rep_id, @total_amount, @tax, @final_amount)
@@ -168,7 +214,6 @@ class DatabaseService {
             });
             const invoiceId = invoiceResult.lastInsertRowid;
 
-            // Insert items & update stock
             const itemStmt = this.db.prepare(`
                 INSERT INTO invoice_items (invoice_id, medicine_id, quantity, free_quantity, unit_price, ptr, total_price)
                 VALUES (@invoice_id, @medicine_id, @quantity, @free_quantity, @unit_price, @ptr, @total_price)
