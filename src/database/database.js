@@ -13,7 +13,7 @@ class DatabaseService {
     }
 
     initializeTables() {
-        // Parties table with GSTIN
+        // Parties table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS parties (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +31,7 @@ class DatabaseService {
             this.db.exec("ALTER TABLE parties ADD COLUMN gstin TEXT;");
         }
 
-        // Suppliers table with GSTIN
+        // Suppliers table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS suppliers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,6 +61,18 @@ class DatabaseService {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
+        `);
+
+        // Items table (NEW)
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                hsn TEXT NOT NULL,
+                category TEXT,
+                code TEXT NOT NULL UNIQUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
         `);
 
         // Clients table
@@ -95,7 +107,7 @@ class DatabaseService {
             )
         `);
 
-        // Invoice items
+        // Invoice items table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoice_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,7 +127,7 @@ class DatabaseService {
         console.log('Database tables initialized successfully');
     }
 
-    // Parties CRUD
+    // ---------------- Parties CRUD ----------------
     getAllParties() {
         return this.db.prepare('SELECT * FROM parties ORDER BY name').all();
     }
@@ -146,7 +158,7 @@ class DatabaseService {
         return this.db.prepare('DELETE FROM parties WHERE id = ?').run(id).changes > 0;
     }
 
-    // Suppliers CRUD
+    // ---------------- Suppliers CRUD ----------------
     getAllSuppliers() {
         return this.db.prepare('SELECT * FROM suppliers ORDER BY name').all();
     }
@@ -177,7 +189,7 @@ class DatabaseService {
         return this.db.prepare('DELETE FROM suppliers WHERE id = ?').run(id).changes > 0;
     }
 
-    // Clients CRUD
+    // ---------------- Clients CRUD ----------------
     getAllClients() {
         return this.db.prepare('SELECT * FROM clients ORDER BY name').all();
     }
@@ -186,7 +198,7 @@ class DatabaseService {
         return { id: result.lastInsertRowid, name };
     }
 
-    // Sales reps
+    // ---------------- Sales reps ----------------
     getAllSalesReps() {
         const reps = this.db.prepare('SELECT * FROM sales_reps ORDER BY name').all();
         if (reps.length === 0) {
@@ -196,7 +208,7 @@ class DatabaseService {
         return reps;
     }
 
-    // Invoices
+    // ---------------- Invoices ----------------
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
             let client = this.db.prepare('SELECT id FROM clients WHERE name = ?').get(invoice.client_name);
@@ -234,7 +246,7 @@ class DatabaseService {
         return transaction(invoiceData);
     }
 
-    // Medicines CRUD
+    // ---------------- Medicines CRUD ----------------
     getAllMedicines() {
         return this.db.prepare('SELECT * FROM medicines ORDER BY name').all();
     }
@@ -259,7 +271,52 @@ class DatabaseService {
         return this.db.prepare('DELETE FROM medicines WHERE id = ?').run(id).changes > 0;
     }
 
-    // Dashboard
+    // ---------------- Items CRUD (NEW) ----------------
+    getAllItems() {
+        return this.db.prepare('SELECT * FROM items ORDER BY name').all();
+    }
+    addItem(item) {
+        const stmt = this.db.prepare(`
+            INSERT INTO items (name, hsn, category, code) 
+            VALUES (@name, @hsn, @category, @code)
+        `);
+        const result = stmt.run(item);
+        return { id: result.lastInsertRowid, ...item };
+    }
+    updateItem(id, item) {
+        return this.db.prepare(`
+            UPDATE items
+            SET name = @name, hsn = @hsn, category = @category, code = @code
+            WHERE id = @id
+        `).run({ id, ...item }).changes > 0;
+    }
+    deleteItem(id) {
+        return this.db.prepare('DELETE FROM items WHERE id = ?').run(id).changes > 0;
+    }
+    searchItems(searchTerm) {
+        return this.db.prepare(`
+            SELECT * FROM items 
+            WHERE name LIKE ? OR hsn LIKE ? OR code LIKE ?
+            ORDER BY name
+        `).all(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+    }
+    generateItemCode(hsn) {
+        const lastCode = this.db.prepare(`
+            SELECT code FROM items 
+            WHERE hsn = ? 
+            ORDER BY id DESC LIMIT 1
+        `).get(hsn);
+
+        let nextNum = 1;
+        if (lastCode && lastCode.code) {
+            const parts = lastCode.code.split("-");
+            const numPart = parseInt(parts[1] || "0", 10);
+            if (!isNaN(numPart)) nextNum = numPart + 1;
+        }
+        return `${hsn}-${String(nextNum).padStart(3, '0')}`;
+    }
+
+    // ---------------- Dashboard ----------------
     getDashboardStats() {
         const totalMedicines = this.db.prepare('SELECT COUNT(*) as count FROM medicines').get().count;
         const lowStockItems = this.db.prepare('SELECT COUNT(*) as count FROM medicines WHERE stock < 10').get().count;
@@ -268,7 +325,7 @@ class DatabaseService {
         return { totalMedicines, lowStockItems, totalInvoices, recentMedicines };
     }
 
-    // Invoice number generator
+    // ---------------- Invoice number generator ----------------
     generateInvoiceNumber() {
         const date = new Date();
         const year = date.getFullYear();
