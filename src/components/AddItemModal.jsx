@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const AddItemModal = ({ isOpen, onClose, onSave, item, onAssignCode }) => {
+const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
     const [formData, setFormData] = useState({
         name: '',
         hsn: '',
@@ -14,6 +14,7 @@ const AddItemModal = ({ isOpen, onClose, onSave, item, onAssignCode }) => {
 
     useEffect(() => {
         if (item) {
+            // EDIT MODE: Pre-fill form with existing item data
             setFormData({
                 name: item.name || '',
                 hsn: item.hsn || '',
@@ -24,14 +25,10 @@ const AddItemModal = ({ isOpen, onClose, onSave, item, onAssignCode }) => {
                 stock: item.stock || ''
             });
         } else {
+            // ADD MODE: Clear the form for a new entry
             setFormData({
-                name: '',
-                hsn: '',
-                item_code: '',
-                batch_number: '',
-                expiry_date: '',
-                price: '',
-                stock: ''
+                name: '', hsn: '', item_code: '', batch_number: '',
+                expiry_date: '', price: '', stock: ''
             });
         }
     }, [item, isOpen]);
@@ -43,11 +40,10 @@ const AddItemModal = ({ isOpen, onClose, onSave, item, onAssignCode }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        for (const key in formData) {
-            if (formData[key] === '') {
-                setError(`Please fill out the ${key.replace('_', ' ')} field.`);
-                return;
-            }
+        // Basic validation
+        if (!formData.name || !formData.price || !formData.stock) {
+            setError('Please fill out all required fields: Name, Price, and Stock.');
+            return;
         }
         setError('');
         onSave(formData);
@@ -67,101 +63,40 @@ const AddItemModal = ({ isOpen, onClose, onSave, item, onAssignCode }) => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Column 1 */}
                         <div className="space-y-4">
-                            {/* Item Name */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Item Name</label>
-                                <input
-                                    type="text"
-                                    name="name"
-                                    value={formData.name}
-                                    onChange={handleChange}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                    required
-                                />
+                                <input type="text" name="name" value={formData.name} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
                             </div>
-                            {/* HSN Number */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">HSN Number</label>
-                                <input
-                                    type="text"
-                                    name="hsn"
-                                    value={formData.hsn}
-                                    onChange={handleChange}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                    required
-                                />
+                                <input type="text" name="hsn" value={formData.hsn} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                             </div>
-                            {/* Item Code + Assign Button */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Item Code</label>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        name="item_code"
-                                        value={formData.item_code}
-                                        onChange={handleChange}
-                                        readOnly
-                                        className="flex-1 mt-1 block px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 focus:outline-none"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => onAssignCode && onAssignCode(formData.hsn)}
-                                        className="mt-1 px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-                                    >
-                                        Assign Code
-                                    </button>
+                            {/* Item Code is now only shown when editing an existing item */}
+                            {item && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Item Code</label>
+                                    <input type="text" name="item_code" value={formData.item_code} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100" />
                                 </div>
-                            </div>
-                            {/* Batch No. */}
-                            <div>
+                            )}
+                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Batch No.</label>
-                                <input
-                                    type="text"
-                                    name="batch_number"
-                                    value={formData.batch_number}
-                                    onChange={handleChange}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                />
-                            </div>
-                            {/* Stock Quantity */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Stock Quantity</label>
-                                <input
-                                    type="number"
-                                    name="stock"
-                                    value={formData.stock}
-                                    onChange={handleChange}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                    required
-                                />
+                                <input type="text" name="batch_number" value={formData.batch_number} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                             </div>
                         </div>
 
                         {/* Column 2 */}
                         <div className="space-y-4">
-                            {/* Expiry Date */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Expiry Date</label>
-                                <input
-                                    type="date"
-                                    name="expiry_date"
-                                    value={formData.expiry_date}
-                                    onChange={handleChange}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                />
+                                <input type="date" name="expiry_date" value={formData.expiry_date} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                             </div>
-                            {/* Selling Price */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Selling Price (₹)</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    name="price"
-                                    value={formData.price}
-                                    onChange={handleChange}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                    required
-                                />
+                                <input type="number" step="0.01" name="price" value={formData.price} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Stock Quantity</label>
+                                <input type="number" name="stock" value={formData.stock} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
                             </div>
                         </div>
                     </div>
@@ -169,18 +104,10 @@ const AddItemModal = ({ isOpen, onClose, onSave, item, onAssignCode }) => {
                     {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
 
                     <div className="flex justify-end space-x-4 pt-8">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-6 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
-                        >
+                        <button type="button" onClick={onClose} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">
                             Close
                         </button>
-                        <button
-                            type="submit"
-                            style={{ backgroundColor: '#31708E' }}
-                            className="px-6 py-2 text-white rounded-md hover:opacity-90 transition-opacity"
-                        >
+                        <button type="submit" style={{ backgroundColor: '#31708E' }} className="px-6 py-2 text-white rounded-md hover:opacity-90">
                             {item ? 'Update' : 'Save'}
                         </button>
                     </div>
