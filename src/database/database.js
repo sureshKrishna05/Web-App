@@ -13,7 +13,7 @@ class DatabaseService {
     }
 
     initializeTables() {
-        // Parties table
+        // Parties table (for customers)
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS parties (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,12 +24,6 @@ class DatabaseService {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
-
-        // Add GSTIN column if missing
-        const partyCols = this.db.prepare("PRAGMA table_info(parties)").all();
-        if (!partyCols.find(c => c.name.toLowerCase() === 'gstin')) {
-            this.db.exec("ALTER TABLE parties ADD COLUMN gstin TEXT;");
-        }
 
         // Suppliers table
         this.db.exec(`
@@ -43,43 +37,19 @@ class DatabaseService {
             );
         `);
 
-        // Add GSTIN column to suppliers if missing
-        const supplierCols = this.db.prepare("PRAGMA table_info(suppliers)").all();
-        if (!supplierCols.find(c => c.name.toLowerCase() === 'gstin')) {
-            this.db.exec("ALTER TABLE suppliers ADD COLUMN gstin TEXT;");
-        }
-
-        // Medicines table
+        // Medicines table (consolidated from 'items')
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS medicines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
+                hsn TEXT,
+                item_code TEXT UNIQUE,
                 batch_number TEXT,
                 expiry_date TEXT,
                 price REAL NOT NULL,
                 stock INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        // Items table (NEW)
-        this.db.exec(`
-            CREATE TABLE IF NOT EXISTS items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                hsn TEXT NOT NULL,
-                category TEXT,
-                code TEXT NOT NULL UNIQUE,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-
-        // Clients table
-        this.db.exec(`
-            CREATE TABLE IF NOT EXISTS clients (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE
             );
         `);
 
@@ -91,7 +61,7 @@ class DatabaseService {
             );
         `);
 
-        // Invoices table
+        // Invoices table (now correctly linked to 'parties')
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +72,7 @@ class DatabaseService {
                 tax REAL DEFAULT 0,
                 final_amount REAL NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (client_id) REFERENCES clients (id),
+                FOREIGN KEY (client_id) REFERENCES parties (id),
                 FOREIGN KEY (sales_rep_id) REFERENCES sales_reps (id)
             )
         `);
@@ -127,7 +97,7 @@ class DatabaseService {
         console.log('Database tables initialized successfully');
     }
 
-    // ---------------- Parties CRUD ----------------
+    // ---------------- Parties (Customers) CRUD ----------------
     getAllParties() {
         return this.db.prepare('SELECT * FROM parties ORDER BY name').all();
     }
@@ -162,13 +132,6 @@ class DatabaseService {
     getAllSuppliers() {
         return this.db.prepare('SELECT * FROM suppliers ORDER BY name').all();
     }
-    searchSuppliers(searchTerm) {
-        return this.db.prepare(`
-            SELECT * FROM suppliers 
-            WHERE name LIKE ? OR gstin LIKE ? 
-            ORDER BY name
-        `).all(`%${searchTerm}%`, `%${searchTerm}%`);
-    }
     addSupplier(supplier) {
         const stmt = this.db.prepare(`
             INSERT INTO suppliers (name, phone, address, gstin) 
@@ -189,15 +152,6 @@ class DatabaseService {
         return this.db.prepare('DELETE FROM suppliers WHERE id = ?').run(id).changes > 0;
     }
 
-    // ---------------- Clients CRUD ----------------
-    getAllClients() {
-        return this.db.prepare('SELECT * FROM clients ORDER BY name').all();
-    }
-    addClient(name) {
-        const result = this.db.prepare('INSERT INTO clients (name) VALUES (?)').run(name);
-        return { id: result.lastInsertRowid, name };
-    }
-
     // ---------------- Sales reps ----------------
     getAllSalesReps() {
         const reps = this.db.prepare('SELECT * FROM sales_reps ORDER BY name').all();
@@ -211,9 +165,9 @@ class DatabaseService {
     // ---------------- Invoices ----------------
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
-            let client = this.db.prepare('SELECT id FROM clients WHERE name = ?').get(invoice.client_name);
-            if (!client && invoice.client_name) {
-                client = this.addClient(invoice.client_name);
+            let party = this.db.prepare('SELECT id FROM parties WHERE name = ?').get(invoice.client_name);
+            if (!party && invoice.client_name) {
+                party = this.addParty({ name: invoice.client_name, phone: '', address: '', gstin: '' });
             }
 
             const invoiceStmt = this.db.prepare(`
@@ -222,7 +176,7 @@ class DatabaseService {
             `);
             const invoiceResult = invoiceStmt.run({
                 ...invoice,
-                client_id: client ? client.id : null
+                client_id: party ? party.id : null
             });
             const invoiceId = invoiceResult.lastInsertRowid;
 
@@ -254,69 +208,31 @@ class DatabaseService {
         return this.db.prepare('SELECT * FROM medicines WHERE name LIKE ? ORDER BY name').all(`%${searchTerm}%`);
     }
     addMedicine(medicine) {
-        const result = this.db.prepare(`
-            INSERT INTO medicines (name, batch_number, expiry_date, price, stock)
-            VALUES (?, ?, ?, ?, ?)
-        `).run(medicine.name, medicine.batch_number, medicine.expiry_date, medicine.price, medicine.stock);
-        return { id: result.lastInsertRowid };
+        const stmt = this.db.prepare(`
+            INSERT INTO medicines (name, hsn, batch_number, expiry_date, price, stock)
+            VALUES (@name, @hsn, @batch_number, @expiry_date, @price, @stock)
+        `);
+        const result = stmt.run(medicine);
+        const newItemId = result.lastInsertRowid;
+        
+        const itemCode = `ITEM-${String(newItemId).padStart(4, '0')}`;
+        this.db.prepare('UPDATE medicines SET item_code = ? WHERE id = ?').run(itemCode, newItemId);
+        
+        return { id: newItemId };
     }
     updateMedicine(id, medicine) {
         return this.db.prepare(`
             UPDATE medicines
-            SET name = ?, batch_number = ?, expiry_date = ?, price = ?, stock = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `).run(medicine.name, medicine.batch_number, medicine.expiry_date, medicine.price, medicine.stock, id).changes > 0;
+            SET name = @name, hsn = @hsn, batch_number = @batch_number, expiry_date = @expiry_date, 
+            price = @price, stock = @stock, updated_at = CURRENT_TIMESTAMP
+            WHERE id = @id
+        `).run({ id, ...medicine }).changes > 0;
     }
     deleteMedicine(id) {
         return this.db.prepare('DELETE FROM medicines WHERE id = ?').run(id).changes > 0;
     }
 
-    // ---------------- Items CRUD (NEW) ----------------
-    getAllItems() {
-        return this.db.prepare('SELECT * FROM items ORDER BY name').all();
-    }
-    addItem(item) {
-        const stmt = this.db.prepare(`
-            INSERT INTO items (name, hsn, category, code) 
-            VALUES (@name, @hsn, @category, @code)
-        `);
-        const result = stmt.run(item);
-        return { id: result.lastInsertRowid, ...item };
-    }
-    updateItem(id, item) {
-        return this.db.prepare(`
-            UPDATE items
-            SET name = @name, hsn = @hsn, category = @category, code = @code
-            WHERE id = @id
-        `).run({ id, ...item }).changes > 0;
-    }
-    deleteItem(id) {
-        return this.db.prepare('DELETE FROM items WHERE id = ?').run(id).changes > 0;
-    }
-    searchItems(searchTerm) {
-        return this.db.prepare(`
-            SELECT * FROM items 
-            WHERE name LIKE ? OR hsn LIKE ? OR code LIKE ?
-            ORDER BY name
-        `).all(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
-    }
-    generateItemCode(hsn) {
-        const lastCode = this.db.prepare(`
-            SELECT code FROM items 
-            WHERE hsn = ? 
-            ORDER BY id DESC LIMIT 1
-        `).get(hsn);
-
-        let nextNum = 1;
-        if (lastCode && lastCode.code) {
-            const parts = lastCode.code.split("-");
-            const numPart = parseInt(parts[1] || "0", 10);
-            if (!isNaN(numPart)) nextNum = numPart + 1;
-        }
-        return `${hsn}-${String(nextNum).padStart(3, '0')}`;
-    }
-
-    // ---------------- Dashboard ----------------
+    // ---------------- Dashboard & Utilities ----------------
     getDashboardStats() {
         const totalMedicines = this.db.prepare('SELECT COUNT(*) as count FROM medicines').get().count;
         const lowStockItems = this.db.prepare('SELECT COUNT(*) as count FROM medicines WHERE stock < 10').get().count;
@@ -325,7 +241,6 @@ class DatabaseService {
         return { totalMedicines, lowStockItems, totalInvoices, recentMedicines };
     }
 
-    // ---------------- Invoice number generator ----------------
     generateInvoiceNumber() {
         const date = new Date();
         const year = date.getFullYear();
