@@ -6,6 +6,8 @@ import BillingPage from '../pages/BillingPage';
 import PlaceholderPage from '../pages/PlaceholderPage';
 import PartiesPage from '../pages/PartiesPage';
 import SuppliersPage from '../pages/SuppliersPage';
+import SalesHistoryPage from '../pages/SalesHistoryPage';
+import EmployeesPage from '../pages/EmployeesPage';
 
 const MainContent = ({ page }) => {
     const renderPage = () => {
@@ -22,6 +24,10 @@ const MainContent = ({ page }) => {
                     return <PartiesPage />;
             case 'Suppliers':
                     return <SuppliersPage/>;  
+            case 'Sales History':
+                    return <SalesHistoryPage/>;
+            case 'Reports':
+                    return <EmployeesPage/>;
             default:
                 // All other pages will still use the placeholder for now
                 return <PlaceholderPage pageName={page} />;

@@ -28,6 +28,20 @@ function createWindow() {
 function setupDatabaseHandlers() {
   if (!db) return;
 
+  // --- NEW IPC HANDLERS for Employee Performance ---
+  ipcMain.handle('get-rep-performance', (event, { repId, month }) => {
+    if (!repId) throw new Error('Sales Rep ID is required');
+    if (!month) throw new Error('Month is required');
+    return db.getRepPerformance(repId, month);
+  });
+
+  ipcMain.handle('set-rep-target', (event, { repId, month, targetAmount }) => {
+    if (!repId) throw new Error('Sales Rep ID is required');
+    if (!month) throw new Error('Month is required');
+    if (targetAmount == null || isNaN(targetAmount)) throw new Error('Valid target amount is required');
+    return db.setRepTarget(repId, month, targetAmount);
+  });
+
   // --- Suppliers Handlers ---
   ipcMain.handle('get-all-suppliers', () => db.getAllSuppliers());
   ipcMain.handle('add-supplier', (event, supplier) => {

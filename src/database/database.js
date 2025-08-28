@@ -37,7 +37,7 @@ class DatabaseService {
             );
         `);
 
-        // Medicines table (consolidated from 'items')
+        // Medicines table (now the single source for inventory)
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS medicines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,6 +58,19 @@ class DatabaseService {
             CREATE TABLE IF NOT EXISTS sales_reps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE
+            );
+        `);
+
+        // --- NEW: Table for Sales Rep Targets ---
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS sales_targets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rep_id INTEGER NOT NULL,
+                month TEXT NOT NULL, -- Format: YYYY-MM
+                target_amount REAL NOT NULL,
+                achieved_amount REAL DEFAULT 0,
+                FOREIGN KEY (rep_id) REFERENCES sales_reps (id),
+                UNIQUE(rep_id, month)
             );
         `);
 
@@ -162,6 +175,32 @@ class DatabaseService {
         return reps;
     }
 
+    // --- NEW: Methods for Employee/Sales Rep Performance ---
+    getRepPerformance(repId, month) { // month in YYYY-MM format
+        const stmt = this.db.prepare(`
+            SELECT 
+                s.name,
+                COALESCE(st.target_amount, 0) as target,
+                COALESCE(SUM(i.final_amount), 0) as achieved
+            FROM sales_reps s
+            LEFT JOIN invoices i ON s.id = i.sales_rep_id AND strftime('%Y-%m', i.created_at) = ?
+            LEFT JOIN sales_targets st ON s.id = st.rep_id AND st.month = ?
+            WHERE s.id = ?
+            GROUP BY s.id
+        `);
+        return stmt.get(month, month, repId);
+    }
+    
+    setRepTarget(repId, month, targetAmount) {
+        const stmt = this.db.prepare(`
+            INSERT INTO sales_targets (rep_id, month, target_amount) 
+            VALUES (?, ?, ?)
+            ON CONFLICT(rep_id, month) 
+            DO UPDATE SET target_amount = excluded.target_amount;
+        `);
+        return stmt.run(repId, month, targetAmount);
+    }
+
     // ---------------- Invoices ----------------
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
@@ -215,6 +254,7 @@ class DatabaseService {
         const result = stmt.run(medicine);
         const newItemId = result.lastInsertRowid;
         
+        // Auto-generate and set the item_code based on the new ID
         const itemCode = `ITEM-${String(newItemId).padStart(4, '0')}`;
         this.db.prepare('UPDATE medicines SET item_code = ? WHERE id = ?').run(itemCode, newItemId);
         

@@ -7,6 +7,8 @@ import ItemsPage from './pages/ItemsPage';
 import BillingPage from './pages/BillingPage';
 import PartiesPage from './pages/PartiesPage';
 import SuppliersPage from './pages/SuppliersPage';
+import SalesHistoryPage from './pages/SalesHistoryPage';
+import EmployeesPage from './pages/EmployeesPage';
 //import PlaceholderPage from './pages/PlaceholderPage';
 
 // --- Icon Components (No change) ---
@@ -80,6 +82,8 @@ const MainContent = ({ page }) => {
             case 'New Invoice': return <BillingPage />;
             case 'Clients': return <PartiesPage />;
             case 'Suppliers': return <SuppliersPage />;
+            case 'Sales History': return <SalesHistoryPage/>;
+            case 'Reports': return <EmployeesPage/>;
             default: return <PlaceholderPage pageName={page} />;
         }
     };
