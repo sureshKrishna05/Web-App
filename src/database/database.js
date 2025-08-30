@@ -57,7 +57,11 @@ class DatabaseService {
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS sales_reps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE
+                name TEXT NOT NULL UNIQUE,
+                dob TEXT,
+                contact_number TEXT,
+                employee_type TEXT,
+                date_of_joining TEXT
             );
         `);
 
@@ -69,7 +73,7 @@ class DatabaseService {
                 month TEXT NOT NULL, -- Format: YYYY-MM
                 target_amount REAL NOT NULL,
                 achieved_amount REAL DEFAULT 0,
-                FOREIGN KEY (rep_id) REFERENCES sales_reps (id),
+                FOREIGN KEY (rep_id) REFERENCES sales_reps (id) ON DELETE CASCADE,
                 UNIQUE(rep_id, month)
             );
         `);
@@ -86,7 +90,7 @@ class DatabaseService {
                 final_amount REAL NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (client_id) REFERENCES parties (id),
-                FOREIGN KEY (sales_rep_id) REFERENCES sales_reps (id)
+                FOREIGN KEY (sales_rep_id) REFERENCES sales_reps (id) ON DELETE SET NULL
             )
         `);
 
@@ -101,7 +105,7 @@ class DatabaseService {
                 unit_price REAL NOT NULL,
                 ptr REAL,
                 total_price REAL NOT NULL,
-                FOREIGN KEY (invoice_id) REFERENCES invoices (id),
+                FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE,
                 FOREIGN KEY (medicine_id) REFERENCES medicines (id)
             )
         `);
@@ -113,6 +117,9 @@ class DatabaseService {
     // ---------------- Parties (Customers) CRUD ----------------
     getAllParties() {
         return this.db.prepare('SELECT * FROM parties ORDER BY name').all();
+    }
+    getPartyByName(name) {
+        return this.db.prepare('SELECT * FROM parties WHERE name = ?').get(name);
     }
     searchParties(searchTerm) {
         return this.db.prepare(`
@@ -167,13 +174,22 @@ class DatabaseService {
 
     // ---------------- Sales reps ----------------
     getAllSalesReps() {
-        const reps = this.db.prepare('SELECT * FROM sales_reps ORDER BY name').all();
-        if (reps.length === 0) {
-            this.db.prepare("INSERT INTO sales_reps (name) VALUES ('Mr. John'), ('Ms. Jane')").run();
-            return this.db.prepare('SELECT * FROM sales_reps ORDER BY name').all();
-        }
-        return reps;
+        return this.db.prepare('SELECT * FROM sales_reps ORDER BY name').all();
     }
+
+    addSalesRep(employee) {
+        const stmt = this.db.prepare(`
+            INSERT INTO sales_reps (name, dob, contact_number, employee_type, date_of_joining) 
+            VALUES (@name, @dob, @contact_number, @employee_type, @date_of_joining)
+        `);
+        const result = stmt.run(employee);
+        return { id: result.lastInsertRowid, ...employee };
+    }
+
+    deleteSalesRep(id) {
+        return this.db.prepare('DELETE FROM sales_reps WHERE id = ?').run(id).changes > 0;
+    }
+
 
     // --- NEW: Methods for Employee/Sales Rep Performance ---
     getRepPerformance(repId, month) { // month in YYYY-MM format
@@ -181,20 +197,19 @@ class DatabaseService {
             SELECT 
                 s.name,
                 COALESCE(st.target_amount, 0) as target,
-                COALESCE(SUM(i.final_amount), 0) as achieved
+                COALESCE(st.achieved_amount, 0) as achieved
             FROM sales_reps s
-            LEFT JOIN invoices i ON s.id = i.sales_rep_id AND strftime('%Y-%m', i.created_at) = ?
             LEFT JOIN sales_targets st ON s.id = st.rep_id AND st.month = ?
             WHERE s.id = ?
             GROUP BY s.id
         `);
-        return stmt.get(month, month, repId);
+        return stmt.get(month, repId);
     }
     
     setRepTarget(repId, month, targetAmount) {
         const stmt = this.db.prepare(`
-            INSERT INTO sales_targets (rep_id, month, target_amount) 
-            VALUES (?, ?, ?)
+            INSERT INTO sales_targets (rep_id, month, target_amount, achieved_amount) 
+            VALUES (?, ?, ?, 0)
             ON CONFLICT(rep_id, month) 
             DO UPDATE SET target_amount = excluded.target_amount;
         `);
@@ -204,9 +219,13 @@ class DatabaseService {
     // ---------------- Invoices ----------------
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
-            let party = this.db.prepare('SELECT id FROM parties WHERE name = ?').get(invoice.client_name);
-            if (!party && invoice.client_name) {
-                party = this.addParty({ name: invoice.client_name, phone: '', address: '', gstin: '' });
+             let partyId = invoice.client_id;
+            if (!partyId) {
+                let party = this.db.prepare('SELECT id FROM parties WHERE name = ?').get(invoice.client_name);
+                if (!party) {
+                    party = this.addParty({ name: invoice.client_name, phone: '', address: '', gstin: '' });
+                }
+                partyId = party.id;
             }
 
             const invoiceStmt = this.db.prepare(`
@@ -215,7 +234,7 @@ class DatabaseService {
             `);
             const invoiceResult = invoiceStmt.run({
                 ...invoice,
-                client_id: party ? party.id : null
+                client_id: partyId
             });
             const invoiceId = invoiceResult.lastInsertRowid;
 
@@ -234,10 +253,129 @@ class DatabaseService {
                 const total_deduction = item.quantity + (item.free_quantity || 0);
                 stockStmt.run({ total_deduction, medicine_id: item.medicine_id });
             }
+
+            // ** NEW LOGIC TO UPDATE EMPLOYEE PERFORMANCE **
+            if (invoice.sales_rep_id) {
+                const month = new Date(invoice.created_at || Date.now()).toISOString().slice(0, 7); // "YYYY-MM"
+                const updateTargetStmt = this.db.prepare(`
+                    INSERT INTO sales_targets (rep_id, month, target_amount, achieved_amount)
+                    VALUES (@rep_id, @month, 0, @final_amount)
+                    ON CONFLICT(rep_id, month)
+                    DO UPDATE SET achieved_amount = achieved_amount + excluded.achieved_amount;
+                `);
+                updateTargetStmt.run({
+                    rep_id: invoice.sales_rep_id,
+                    month: month,
+                    final_amount: invoice.final_amount
+                });
+            }
+
             return invoiceId;
         });
         return transaction(invoiceData);
     }
+
+    getAllInvoicesWithClients() {
+        const stmt = this.db.prepare(`
+            SELECT 
+                i.id, 
+                i.invoice_number, 
+                i.final_amount, 
+                i.created_at, 
+                p.name as client_name 
+            FROM invoices i
+            LEFT JOIN parties p ON i.client_id = p.id
+            ORDER BY i.created_at DESC
+        `);
+        return stmt.all();
+    }
+
+    getInvoiceDetails(invoiceId) {
+        const invoice = this.db.prepare(`
+            SELECT 
+                i.*, 
+                p.name as client_name,
+                p.address as client_address,
+                p.phone as client_phone
+            FROM invoices i
+            LEFT JOIN parties p ON i.client_id = p.id
+            WHERE i.id = ?
+        `).get(invoiceId);
+
+        if (invoice) {
+            invoice.items = this.db.prepare(`
+                SELECT 
+                    ii.*,
+                    m.name as medicine_name
+                FROM invoice_items ii
+                JOIN medicines m ON ii.medicine_id = m.id
+                WHERE ii.invoice_id = ?
+            `).all(invoiceId);
+        }
+        return invoice;
+    }
+        getFilteredInvoices(filters) {
+        let query = `
+            SELECT 
+                i.id, 
+                i.invoice_number, 
+                i.final_amount, 
+                i.created_at, 
+                p.name as client_name,
+                sr.name as rep_name
+            FROM invoices i
+            LEFT JOIN parties p ON i.client_id = p.id
+            LEFT JOIN sales_reps sr ON i.sales_rep_id = sr.id
+        `;
+
+        const whereClauses = [];
+        const params = [];
+
+        if (filters.clientId) {
+            whereClauses.push('i.client_id = ?');
+            params.push(filters.clientId);
+        }
+        if (filters.repId) {
+            whereClauses.push('i.sales_rep_id = ?');
+            params.push(filters.repId);
+        }
+        if (filters.month) {
+            whereClauses.push("strftime('%Y-%m', i.created_at) = ?");
+            params.push(filters.month);
+        }
+
+        if (whereClauses.length > 0) {
+            query += ' WHERE ' + whereClauses.join(' AND ');
+        }
+
+        query += ' ORDER BY i.created_at DESC';
+
+        return this.db.prepare(query).all(params);
+    }
+
+    getInvoicesForExport(invoiceIds) {
+        const query = `
+            SELECT
+                i.invoice_number,
+                i.created_at,
+                p.name as client_name,
+                sr.name as rep_name,
+                m.name as medicine_name,
+                ii.quantity,
+                ii.free_quantity,
+                ii.unit_price,
+                ii.total_price
+            FROM invoices i
+            LEFT JOIN parties p ON i.client_id = p.id
+            LEFT JOIN sales_reps sr ON i.sales_rep_id = sr.id
+            JOIN invoice_items ii ON i.id = ii.invoice_id
+            JOIN medicines m ON ii.medicine_id = m.id
+            WHERE i.id IN (${invoiceIds.map(() => '?').join(',')})
+            ORDER BY i.invoice_number, m.name
+        `;
+        return this.db.prepare(query).all(invoiceIds);
+    }
+
 
     // ---------------- Medicines CRUD ----------------
     getAllMedicines() {
@@ -254,7 +392,6 @@ class DatabaseService {
         const result = stmt.run(medicine);
         const newItemId = result.lastInsertRowid;
         
-        // Auto-generate and set the item_code based on the new ID
         const itemCode = `ITEM-${String(newItemId).padStart(4, '0')}`;
         this.db.prepare('UPDATE medicines SET item_code = ? WHERE id = ?').run(itemCode, newItemId);
         

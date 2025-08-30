@@ -8,6 +8,7 @@ import PartiesPage from '../pages/PartiesPage';
 import SuppliersPage from '../pages/SuppliersPage';
 import SalesHistoryPage from '../pages/SalesHistoryPage';
 import EmployeesPage from '../pages/EmployeesPage';
+import ManageEmployeesPage from '../pages/ManageEmployeesPage';
 
 const MainContent = ({ page }) => {
     const renderPage = () => {
@@ -24,6 +25,8 @@ const MainContent = ({ page }) => {
                     return <PartiesPage />;
             case 'Suppliers':
                     return <SuppliersPage/>;  
+            case 'Employee':
+                    return <ManageEmployeesPage/>;
             case 'Sales History':
                     return <SalesHistoryPage/>;
             case 'Reports':

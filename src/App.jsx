@@ -9,6 +9,7 @@ import PartiesPage from './pages/PartiesPage';
 import SuppliersPage from './pages/SuppliersPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import EmployeesPage from './pages/EmployeesPage';
+import ManageEmployeesPage from './pages/ManageEmployeesPage';
 //import PlaceholderPage from './pages/PlaceholderPage';
 
 // --- Icon Components (No change) ---
@@ -29,7 +30,7 @@ const navItems = [
     { name: 'Sales', icon: <IconSales />, submenu: [{ name: 'New Invoice' }, { name: 'Sales History' }] },
     { name: 'Purchases', icon: <IconPurchases />, submenu: [{ name: 'New Purchase Bill' }, { name: 'Purchase History' }] },
     { name: 'Items', icon: <IconItems /> },
-    { name: 'Connections', icon: <IconParties />, submenu: [{ name: 'Clients'}, {name: 'Suppliers'}]},
+    { name: 'Connections', icon: <IconParties />, submenu: [{ name: 'Clients'}, {name: 'Suppliers'}, {name: 'Employee'}]},
     { name: 'Reports', icon: <IconReports /> },
 ];
 
@@ -84,6 +85,7 @@ const MainContent = ({ page }) => {
             case 'Suppliers': return <SuppliersPage />;
             case 'Sales History': return <SalesHistoryPage/>;
             case 'Reports': return <EmployeesPage/>;
+            case 'Employee': return <ManageEmployeesPage/>;
             default: return <PlaceholderPage pageName={page} />;
         }
     };

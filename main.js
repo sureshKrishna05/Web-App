@@ -1,5 +1,7 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const ExcelJS = require('exceljs');
 const DatabaseService = require('./src/database/database');
 
 let db;
@@ -86,6 +88,7 @@ function setupDatabaseHandlers() {
     return db.deleteParty(id);
   });
   ipcMain.handle('search-parties', (event, searchTerm) => db.searchParties(searchTerm));
+  ipcMain.handle('get-party-by-name', (event, name) => db.getPartyByName(name));
 
   // --- Clients Handlers ---
   ipcMain.handle('get-all-clients', () => db.getAllClients());
@@ -96,30 +99,78 @@ function setupDatabaseHandlers() {
 
   // --- Sales Reps ---
   ipcMain.handle('get-all-sales-reps', () => db.getAllSalesReps());
+  ipcMain.handle('add-sales-rep', (event, employeeData) => {
+    if (!employeeData.name?.trim()) throw new Error('Employee name is required');
+    return db.addSalesRep(employeeData);
+  });
+  ipcMain.handle('delete-sales-rep', (event, id) => db.deleteSalesRep(id));
 
   // --- Medicines Handlers ---
   ipcMain.handle('get-all-medicines', () => db.getAllMedicines());
   ipcMain.handle('search-medicines', (event, searchTerm) => db.searchMedicines(searchTerm));
   ipcMain.handle('add-medicine', (event, medicine) => {
-    if (!medicine.name?.trim()) throw new Error('Medicine name is required');
-    if (medicine.price == null || isNaN(medicine.price)) throw new Error('Valid price is required');
-    if (medicine.stock == null || isNaN(medicine.stock)) throw new Error('Valid stock quantity is required');
+    if (!medicine.name?.trim() || medicine.price == null || medicine.stock == null) throw new Error('Medicine name, price, and stock are required');
     return db.addMedicine(medicine);
   });
   ipcMain.handle('update-medicine', (event, id, medicine) => {
-    if (!id) throw new Error('Medicine ID is required for update');
-    if (!medicine.name?.trim()) throw new Error('Medicine name is required');
-    if (medicine.price == null || isNaN(medicine.price)) throw new Error('Valid price is required');
-    if (medicine.stock == null || isNaN(medicine.stock)) throw new Error('Valid stock quantity is required');
+    if (!id || !medicine.name?.trim() || medicine.price == null || medicine.stock == null) throw new Error('Medicine ID, name, price, and stock are required');
     return db.updateMedicine(id, medicine);
   });
-  ipcMain.handle('delete-medicine', (event, id) => {
-    if (!id) throw new Error('Medicine ID is required for deletion');
-    return db.deleteMedicine(id);
+  ipcMain.handle('delete-medicine', (event, id) => db.deleteMedicine(id));
+
+  // --- Invoice Handlers ---
+  ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));
+  ipcMain.handle('get-filtered-invoices', (event, filters) => db.getFilteredInvoices(filters));
+  ipcMain.handle('get-invoice-details', (event, invoiceId) => {
+    if (!invoiceId) throw new Error('Invoice ID is required');
+    return db.getInvoiceDetails(invoiceId);
   });
 
-  // --- Invoices ---
-  ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));
+  // --- Export Handlers ---
+  ipcMain.handle('export-invoices-csv', async (event, invoiceIds) => {
+    if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices to export.' };
+    const records = db.getInvoicesForExport(invoiceIds);
+    if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
+
+    const headers = 'InvoiceNumber,Date,ClientName,SalesRep,ItemName,Quantity,FreeQuantity,UnitPrice,TotalPrice';
+    const rows = records.map(r => 
+      [`"${r.invoice_number}"`, `"${new Date(r.created_at).toLocaleDateString()}"`, `"${r.client_name}"`, `"${r.rep_name || 'N/A'}"`, `"${r.medicine_name}"`, r.quantity, r.free_quantity, r.unit_price, r.total_price].join(',')
+    );
+    const csvContent = [headers, ...rows].join('\n');
+
+    const { filePath } = await dialog.showSaveDialog({ title: 'Export Sales to CSV', defaultPath: `sales-export.csv`, filters: [{ name: 'CSV Files', extensions: ['csv'] }] });
+    if (filePath) {
+      try {
+        fs.writeFileSync(filePath, csvContent);
+        return { success: true, path: filePath };
+      } catch (error) { return { success: false, message: error.message }; }
+    }
+    return { success: false, message: 'Save cancelled.' };
+  });
+
+  ipcMain.handle('export-invoices-xlsx', async (event, invoiceIds) => {
+    if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices to export.' };
+    const records = db.getInvoicesForExport(invoiceIds);
+    if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
+    
+    const { filePath } = await dialog.showSaveDialog({ title: 'Export Sales to Excel', defaultPath: `sales-export.xlsx`, filters: [{ name: 'Excel Files', extensions: ['xlsx'] }] });
+    if (!filePath) return { success: false, message: 'Save cancelled.' };
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Sales Export');
+      worksheet.columns = [
+        { header: 'Invoice Number', key: 'invoice_number', width: 20 }, { header: 'Date', key: 'created_at', width: 15 },
+        { header: 'Client Name', key: 'client_name', width: 30 }, { header: 'Sales Rep', key: 'rep_name', width: 20 },
+        { header: 'Item Name', key: 'medicine_name', width: 30 }, { header: 'Quantity', key: 'quantity', width: 10 },
+        { header: 'Free Quantity', key: 'free_quantity', width: 15 }, { header: 'Unit Price', key: 'unit_price', width: 15, style: { numFmt: '"₹"#,##0.00' } },
+        { header: 'Total Price', key: 'total_price', width: 15, style: { numFmt: '"₹"#,##0.00' } }
+      ];
+      records.forEach(record => worksheet.addRow(record));
+      await workbook.xlsx.writeFile(filePath);
+      return { success: true, path: filePath };
+    } catch (error) { return { success: false, message: error.message }; }
+  });
 
   // --- Misc ---
   ipcMain.handle('get-all-invoices', () => db.getAllInvoices?.() || []);
@@ -131,7 +182,6 @@ app.whenReady().then(() => {
   db = new DatabaseService();
   setupDatabaseHandlers();
   createWindow();
-
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -143,3 +193,4 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+

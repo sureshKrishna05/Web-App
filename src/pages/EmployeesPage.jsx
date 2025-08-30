@@ -51,7 +51,8 @@ const EmployeesPage = () => {
 
             const performance = {};
             for (const rep of salesReps) {
-                performance[rep.id] = await window.electronAPI.getRepPerformance(rep.id, month);
+                // Pass arguments as a single object
+                performance[rep.id] = await window.electronAPI.getRepPerformance({ repId: rep.id, month: month });
             }
             setPerformanceData(performance);
         } catch (error) {
@@ -77,7 +78,12 @@ const EmployeesPage = () => {
     const handleSaveTarget = async (targetAmount) => {
         if (!selectedRep || !targetAmount) return;
         try {
-            await window.electronAPI.setRepTarget(selectedRep.id, selectedMonth, Number(targetAmount));
+            // Pass arguments as a single object
+            await window.electronAPI.setRepTarget({ 
+                repId: selectedRep.id, 
+                month: selectedMonth, 
+                targetAmount: Number(targetAmount) 
+            });
             setIsModalOpen(false);
             setSelectedRep(null);
             fetchData(selectedMonth); // Refresh data

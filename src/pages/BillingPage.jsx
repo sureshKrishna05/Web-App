@@ -34,7 +34,7 @@ const PrintableBill = React.forwardRef(({ billItems, clientName, invoiceNumber, 
                             <td className="py-2">{item.name}</td>
                             <td className="py-2">{item.quantity}</td>
                             <td className="py-2">{item.free_quantity}</td>
-                            <td className="py-2">₹{item.ptr.toFixed(2)}</td>
+                            <td className="py-2">₹{item.ptr ? item.ptr.toFixed(2) : '0.00'}</td>
                             <td className="py-2">₹{item.price.toFixed(2)}</td>
                             <td className="py-2 text-right">₹{(item.price * item.quantity).toFixed(2)}</td>
                         </tr>
@@ -70,6 +70,7 @@ const BillingPage = () => {
     // --- State for existing features ---
     const [salesReps, setSalesReps] = useState([]);
     const [clientName, setClientName] = useState('');
+    const [clientId, setClientId] = useState(null);
     const [salesRepId, setSalesRepId] = useState('');
     const [gstRate, setGstRate] = useState(5);
     const [ptr, setPtr] = useState('');
@@ -106,6 +107,7 @@ const BillingPage = () => {
     // --- Client Search Logic ---
     const handleClientSearch = useCallback(async (query) => {
         setClientName(query);
+        setClientId(null); // Reset client ID when searching
         if (query.length > 0) {
             const results = await window.electronAPI.searchParties(query);
             setClientSuggestions(results);
@@ -117,8 +119,9 @@ const BillingPage = () => {
         }
     }, []);
 
-    const handleSelectClient = (name) => {
-        setClientName(name);
+    const handleSelectClient = (client) => {
+        setClientName(client.name);
+        setClientId(client.id);
         setClientSuggestions([]);
         setIsNewClient(false);
     };
@@ -129,43 +132,38 @@ const BillingPage = () => {
         setNewClientDetails(prev => ({ ...prev, [name]: value }));
     };
 
-const handleSaveNewClient = async () => {
-    if (!clientName?.trim()) {
-        alert("Please enter a name for the new client.");
-        return;
-    }
-    if (!newClientDetails.address?.trim()) {
-        alert("Please enter the address.");
-        return;
-    }
-    if (!newClientDetails.phone?.trim()) {
-        alert("Please enter the contact number.");
-        return;
-    }
-    if (!newClientDetails.GSTIN?.trim()) {
-        alert("Please enter the GSTIN.");
-        return;
-    }
+    const handleSaveNewClient = async () => {
+        if (!clientName?.trim()) {
+            console.error("Please enter a name for the new client.");
+            return;
+        }
 
-    try {
-        // Map frontend state to backend format
-        const newParty = {
-            name: clientName.trim(),
-            address: newClientDetails.address.trim(),
-            phone: newClientDetails.phone.trim(),
-            gstin: newClientDetails.GSTIN.trim(), // lowercase key
-        };
+        try {
+            const newParty = {
+                name: clientName.trim(),
+                address: newClientDetails.address.trim(),
+                phone: newClientDetails.phone.trim(),
+                gstin: newClientDetails.GSTIN.trim(),
+            };
 
-        console.log("Sending party data:", newParty); // Debug check
-        await window.electronAPI.addParty(newParty);
+            await window.electronAPI.addParty(newParty);
+            
+            // This is a non-blocking notification
+            console.log(`Client "${clientName}" saved successfully!`);
 
-        alert(`Client "${clientName}" saved successfully!`);
-        setIsNewClient(false);
-    } catch (error) {
-        console.error("Failed to save new client:", error);
-        alert(error.message || "Failed to save client. A client with this name may already exist.");
-    }
-};
+            const savedClient = await window.electronAPI.getPartyByName(newParty.name);
+            if (savedClient) {
+                handleSelectClient(savedClient);
+            } else {
+                setIsNewClient(false);
+            }
+
+        } catch (error) {
+            console.error("Failed to save new client:", error);
+            // This is a non-blocking notification
+            console.log(error.message || "Failed to save client. A client with this name may already exist.");
+        }
+    };
     
     // --- Other Handlers & Effects ---
     useEffect(() => {
@@ -193,12 +191,12 @@ const handleSaveNewClient = async () => {
     };
 
     const handleAddItem = () => {
-        if (!selectedMedicine || !quantity || Number(quantity) < 0) {
-            alert("Please select a valid medicine and quantity."); return;
+        if (!selectedMedicine || !quantity || Number(quantity) <= 0) {
+            console.error("Please select a valid medicine and quantity."); return;
         }
         const totalStockNeeded = Number(quantity) + Number(freeQuantity || 0);
         if (totalStockNeeded > selectedMedicine.stock) {
-            alert(`Cannot add item. Only ${selectedMedicine.stock} units are in stock.`); return;
+            console.error(`Cannot add item. Only ${selectedMedicine.stock} units are in stock.`); return;
         }
         const newItem = { ...selectedMedicine, quantity: Number(quantity), free_quantity: Number(freeQuantity || 0), ptr: Number(ptr || 0) };
         setBillItems(prevItems => [...prevItems, newItem]);
@@ -209,29 +207,45 @@ const handleSaveNewClient = async () => {
         setBillItems(prevItems => prevItems.filter((_, index) => index !== indexToRemove));
     };
 
-    const resetForm = useCallback(async () => {
-        setClientName(''); setSalesRepId(''); setBillItems([]); setGstRate(5); setIsNewClient(false); setNewClientDetails({ phone: '', address: '', GSTIN: '' });
+    const resetForm = useCallback(() => {
+        setClientName(''); 
+        setClientId(null);
+        setSalesRepId(''); 
+        setBillItems([]); 
+        setGstRate(5); 
+        setIsNewClient(false); 
+        setNewClientDetails({ phone: '', address: '', GSTIN: '' });
         fetchInvoiceNumber();
     }, [fetchInvoiceNumber]);
 
     const handleSaveInvoice = async () => {
-        if (billItems.length === 0 || !clientName) {
-            alert("Please enter a client name and add items."); return;
+        if (billItems.length === 0 || !clientName || !clientId) {
+            console.error("Please select a client and add items to the invoice.");
+            return;
         }
         const invoiceData = {
-            invoice_number: invoiceNumber, party_name: clientName, sales_rep_id: salesRepId,
-            total_amount: totals.subtotal, tax: totals.tax, final_amount: totals.finalAmount,
+            invoice_number: invoiceNumber, 
+            client_id: clientId, // Use client ID
+            sales_rep_id: salesRepId,
+            total_amount: totals.subtotal, 
+            tax: totals.tax, 
+            final_amount: totals.finalAmount,
             items: billItems.map(item => ({
-                medicine_id: item.id, quantity: item.quantity, free_quantity: item.free_quantity,
-                unit_price: item.price, ptr: item.ptr, total_price: item.price * item.quantity
+                medicine_id: item.id, 
+                quantity: item.quantity, 
+                free_quantity: item.free_quantity,
+                unit_price: item.price, 
+                ptr: item.ptr, 
+                total_price: item.price * item.quantity
             }))
         };
         try {
             await window.electronAPI.createInvoice(invoiceData);
-            alert(`Invoice ${invoiceNumber} saved successfully!`);
-            handlePrint(); resetForm();
+            console.log(`Invoice ${invoiceNumber} saved successfully!`);
+            handlePrint(); 
+            resetForm();
         } catch (error) {
-            console.error("Failed to save invoice:", error); alert("Error saving invoice.");
+            console.error("Failed to save invoice:", error); 
         }
     };
 
@@ -253,7 +267,7 @@ const handleSaveNewClient = async () => {
                         <input type="text" value={clientName} onChange={(e) => handleClientSearch(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                         {clientSuggestions.length > 0 && (
                             <div className="absolute z-20 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
-                                {clientSuggestions.map(client => <div key={client.id} onClick={() => handleSelectClient(client.name)} className="p-2 hover:bg-gray-100 cursor-pointer">{client.name}</div>)}
+                                {clientSuggestions.map(client => <div key={client.id} onClick={() => handleSelectClient(client)} className="p-2 hover:bg-gray-100 cursor-pointer">{client.name}</div>)}
                             </div>
                         )}
                     </div>

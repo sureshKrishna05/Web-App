@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 // --- Reusable Modal for Add/Edit Supplier ---
 const SupplierModal = ({ isOpen, onClose, onSave, item }) => {
-    const [formData, setFormData] = useState({ name: '', phone: '', address: '' });
+    const [formData, setFormData] = useState({ name: '', phone: '', address: '', gstin: '' });
 
     useEffect(() => {
         if (item) {
-            setFormData({ name: item.name, phone: item.phone || '', address: item.address || '' });
+            setFormData({ name: item.name, phone: item.phone || '', address: item.address || '', gstin: item.gstin || '' });
         } else {
-            setFormData({ name: '', phone: '', address: '' });
+            setFormData({ name: '', phone: '', address: '', gstin: '' });
         }
     }, [item, isOpen]);
 
@@ -59,6 +59,16 @@ const SupplierModal = ({ isOpen, onClose, onSave, item }) => {
                         <textarea
                             name="address"
                             value={formData.address}
+                            onChange={handleChange}
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium">GSTIN</label>
+                        <input
+                            type="text"
+                            name="gstin"
+                            value={formData.gstin}
                             onChange={handleChange}
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                         />
@@ -128,7 +138,8 @@ const SuppliersPage = () => {
             handleCloseModal();
         } catch (err) {
             console.error("Failed to save supplier:", err);
-            alert("Failed to save supplier. A supplier with this name may already exist.");
+            // Non-blocking notification
+            console.log("Failed to save supplier. A supplier with this name may already exist.");
         }
     };
 
@@ -139,7 +150,8 @@ const SuppliersPage = () => {
                 fetchSuppliers();
             } catch (err) {
                 console.error("Failed to delete supplier:", err);
-                alert('Failed to delete supplier.');
+                 // Non-blocking notification
+                console.log('Failed to delete supplier.');
             }
         }
     };
