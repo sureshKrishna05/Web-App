@@ -65,7 +65,7 @@ class DatabaseService {
             );
         `);
 
-        // --- NEW: Table for Sales Rep Targets ---
+        // Table for Sales Rep Targets
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS sales_targets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +78,7 @@ class DatabaseService {
             );
         `);
 
-        // Invoices table (now correctly linked to 'parties')
+        // Invoices table - UPDATED with status and payment_mode
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,18 +88,21 @@ class DatabaseService {
                 total_amount REAL NOT NULL,
                 tax REAL DEFAULT 0,
                 final_amount REAL NOT NULL,
+                payment_mode TEXT,
+                status TEXT DEFAULT 'Draft',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (client_id) REFERENCES parties (id),
                 FOREIGN KEY (sales_rep_id) REFERENCES sales_reps (id) ON DELETE SET NULL
             )
         `);
 
-        // Invoice items table
+        // Invoice items table - UPDATED with hsn
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoice_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 invoice_id INTEGER NOT NULL,
                 medicine_id INTEGER NOT NULL,
+                hsn TEXT,
                 quantity INTEGER NOT NULL,
                 free_quantity INTEGER DEFAULT 0,
                 unit_price REAL NOT NULL,
@@ -191,8 +194,8 @@ class DatabaseService {
     }
 
 
-    // --- NEW: Methods for Employee/Sales Rep Performance ---
-    getRepPerformance(repId, month) { // month in YYYY-MM format
+    // --- Employee/Sales Rep Performance ---
+    getRepPerformance(repId, month) {
         const stmt = this.db.prepare(`
             SELECT 
                 s.name,
@@ -219,8 +222,8 @@ class DatabaseService {
     // ---------------- Invoices ----------------
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
-             let partyId = invoice.client_id;
-            if (!partyId) {
+            let partyId = invoice.client_id;
+            if (!partyId && invoice.client_name) {
                 let party = this.db.prepare('SELECT id FROM parties WHERE name = ?').get(invoice.client_name);
                 if (!party) {
                     party = this.addParty({ name: invoice.client_name, phone: '', address: '', gstin: '' });
@@ -229,8 +232,8 @@ class DatabaseService {
             }
 
             const invoiceStmt = this.db.prepare(`
-                INSERT INTO invoices (invoice_number, client_id, sales_rep_id, total_amount, tax, final_amount)
-                VALUES (@invoice_number, @client_id, @sales_rep_id, @total_amount, @tax, @final_amount)
+                INSERT INTO invoices (invoice_number, client_id, sales_rep_id, total_amount, tax, final_amount, payment_mode, status)
+                VALUES (@invoice_number, @client_id, @sales_rep_id, @total_amount, @tax, @final_amount, @payment_mode, @status)
             `);
             const invoiceResult = invoiceStmt.run({
                 ...invoice,
@@ -239,35 +242,39 @@ class DatabaseService {
             const invoiceId = invoiceResult.lastInsertRowid;
 
             const itemStmt = this.db.prepare(`
-                INSERT INTO invoice_items (invoice_id, medicine_id, quantity, free_quantity, unit_price, ptr, total_price)
-                VALUES (@invoice_id, @medicine_id, @quantity, @free_quantity, @unit_price, @ptr, @total_price)
+                INSERT INTO invoice_items (invoice_id, medicine_id, hsn, quantity, free_quantity, unit_price, ptr, total_price)
+                VALUES (@invoice_id, @medicine_id, @hsn, @quantity, @free_quantity, @unit_price, @ptr, @total_price)
             `);
-            const stockStmt = this.db.prepare(`
-                UPDATE medicines
-                SET stock = stock - @total_deduction
-                WHERE id = @medicine_id AND stock >= @total_deduction
-            `);
-
+            
             for (const item of invoice.items) {
                 itemStmt.run({ invoice_id: invoiceId, ...item });
-                const total_deduction = item.quantity + (item.free_quantity || 0);
-                stockStmt.run({ total_deduction, medicine_id: item.medicine_id });
             }
 
-            // ** NEW LOGIC TO UPDATE EMPLOYEE PERFORMANCE **
-            if (invoice.sales_rep_id) {
-                const month = new Date(invoice.created_at || Date.now()).toISOString().slice(0, 7); // "YYYY-MM"
-                const updateTargetStmt = this.db.prepare(`
-                    INSERT INTO sales_targets (rep_id, month, target_amount, achieved_amount)
-                    VALUES (@rep_id, @month, 0, @final_amount)
-                    ON CONFLICT(rep_id, month)
-                    DO UPDATE SET achieved_amount = achieved_amount + excluded.achieved_amount;
+            if (invoice.status === 'Completed') {
+                const stockStmt = this.db.prepare(`
+                    UPDATE medicines SET stock = stock - @total_deduction
+                    WHERE id = @medicine_id AND stock >= @total_deduction
                 `);
-                updateTargetStmt.run({
-                    rep_id: invoice.sales_rep_id,
-                    month: month,
-                    final_amount: invoice.final_amount
-                });
+
+                for (const item of invoice.items) {
+                    const total_deduction = item.quantity + (item.free_quantity || 0);
+                    stockStmt.run({ total_deduction, medicine_id: item.medicine_id });
+                }
+
+                if (invoice.sales_rep_id) {
+                    const month = new Date().toISOString().slice(0, 7);
+                    const updateTargetStmt = this.db.prepare(`
+                        INSERT INTO sales_targets (rep_id, month, target_amount, achieved_amount)
+                        VALUES (@rep_id, @month, 0, @final_amount)
+                        ON CONFLICT(rep_id, month)
+                        DO UPDATE SET achieved_amount = achieved_amount + excluded.achieved_amount;
+                    `);
+                    updateTargetStmt.run({
+                        rep_id: invoice.sales_rep_id,
+                        month: month,
+                        final_amount: invoice.final_amount
+                    });
+                }
             }
 
             return invoiceId;
@@ -275,21 +282,50 @@ class DatabaseService {
         return transaction(invoiceData);
     }
 
-    getAllInvoicesWithClients() {
-        const stmt = this.db.prepare(`
+    getFilteredInvoices(filters) {
+        let query = `
             SELECT 
                 i.id, 
                 i.invoice_number, 
                 i.final_amount, 
                 i.created_at, 
-                p.name as client_name 
+                i.status,
+                p.name as client_name,
+                sr.name as rep_name
             FROM invoices i
             LEFT JOIN parties p ON i.client_id = p.id
-            ORDER BY i.created_at DESC
-        `);
-        return stmt.all();
+            LEFT JOIN sales_reps sr ON i.sales_rep_id = sr.id
+        `;
+    
+        const whereClauses = [];
+        const params = [];
+    
+        if (filters.clientId) {
+            whereClauses.push('i.client_id = ?');
+            params.push(filters.clientId);
+        }
+        if (filters.repId) {
+            whereClauses.push('i.sales_rep_id = ?');
+            params.push(filters.repId);
+        }
+        if (filters.month) {
+            whereClauses.push("strftime('%Y-%m', i.created_at) = ?");
+            params.push(filters.month);
+        }
+        if (filters.status) {
+            whereClauses.push('i.status = ?');
+            params.push(filters.status);
+        }
+    
+        if (whereClauses.length > 0) {
+            query += ' WHERE ' + whereClauses.join(' AND ');
+        }
+    
+        query += ' ORDER BY i.created_at DESC';
+    
+        return this.db.prepare(query).all(params);
     }
-
+    
     getInvoiceDetails(invoiceId) {
         const invoice = this.db.prepare(`
             SELECT 
@@ -306,51 +342,16 @@ class DatabaseService {
             invoice.items = this.db.prepare(`
                 SELECT 
                     ii.*,
-                    m.name as medicine_name
+                    m.name as medicine_name,
+                    m.hsn,
+                    m.batch_number,
+                    m.expiry_date
                 FROM invoice_items ii
                 JOIN medicines m ON ii.medicine_id = m.id
                 WHERE ii.invoice_id = ?
             `).all(invoiceId);
         }
         return invoice;
-    }
-        getFilteredInvoices(filters) {
-        let query = `
-            SELECT 
-                i.id, 
-                i.invoice_number, 
-                i.final_amount, 
-                i.created_at, 
-                p.name as client_name,
-                sr.name as rep_name
-            FROM invoices i
-            LEFT JOIN parties p ON i.client_id = p.id
-            LEFT JOIN sales_reps sr ON i.sales_rep_id = sr.id
-        `;
-
-        const whereClauses = [];
-        const params = [];
-
-        if (filters.clientId) {
-            whereClauses.push('i.client_id = ?');
-            params.push(filters.clientId);
-        }
-        if (filters.repId) {
-            whereClauses.push('i.sales_rep_id = ?');
-            params.push(filters.repId);
-        }
-        if (filters.month) {
-            whereClauses.push("strftime('%Y-%m', i.created_at) = ?");
-            params.push(filters.month);
-        }
-
-        if (whereClauses.length > 0) {
-            query += ' WHERE ' + whereClauses.join(' AND ');
-        }
-
-        query += ' ORDER BY i.created_at DESC';
-
-        return this.db.prepare(query).all(params);
     }
 
     getInvoicesForExport(invoiceIds) {
@@ -361,6 +362,7 @@ class DatabaseService {
                 p.name as client_name,
                 sr.name as rep_name,
                 m.name as medicine_name,
+                m.hsn,
                 ii.quantity,
                 ii.free_quantity,
                 ii.unit_price,
@@ -413,7 +415,7 @@ class DatabaseService {
     getDashboardStats() {
         const totalMedicines = this.db.prepare('SELECT COUNT(*) as count FROM medicines').get().count;
         const lowStockItems = this.db.prepare('SELECT COUNT(*) as count FROM medicines WHERE stock < 10').get().count;
-        const totalInvoices = this.db.prepare('SELECT COUNT(*) as count FROM invoices').get().count;
+        const totalInvoices = this.db.prepare("SELECT COUNT(*) as count FROM invoices WHERE status = 'Completed'").get().count;
         const recentMedicines = this.db.prepare('SELECT * FROM medicines ORDER BY created_at DESC LIMIT 5').all();
         return { totalMedicines, lowStockItems, totalInvoices, recentMedicines };
     }
@@ -433,3 +435,4 @@ class DatabaseService {
 }
 
 module.exports = DatabaseService;
+

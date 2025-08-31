@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const SalesHistoryPage = ({ setActivePage, setSelectedInvoiceId }) => {
+const SalesHistoryPage = () => {
     const [invoices, setInvoices] = useState([]);
     const [clients, setClients] = useState([]);
     const [reps, setReps] = useState([]);
     const [filters, setFilters] = useState({
         clientId: '',
         repId: '',
-        month: ''
+        month: '',
+        status: '' // Added status to filters
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -47,23 +48,28 @@ const SalesHistoryPage = ({ setActivePage, setSelectedInvoiceId }) => {
         const { name, value } = e.target;
         setFilters(prev => ({ ...prev, [name]: value }));
     };
+    
+    const handleExport = async () => {
+        const completedInvoices = invoices.filter(inv => inv.status === 'Completed');
+        const invoiceIds = completedInvoices.map(inv => inv.id);
 
-    const handleViewDetails = (id) => {
-        setSelectedInvoiceId(id);
-        setActivePage('Invoice Details');
-    };
-
-    const handleExport = async (format) => {
-        const invoiceIds = invoices.map(inv => inv.id);
         if (invoiceIds.length === 0) {
-            console.log("No invoices to export.");
+            console.log("No completed invoices to export.");
             return;
         }
+
+        // Using a simple prompt to ask for format.
+        const format = prompt("Export as 'csv' or 'xlsx'?");
+        if (!['csv', 'xlsx'].includes(format?.toLowerCase())) {
+            console.log("Export cancelled or invalid format.");
+            return;
+        }
+
         try {
             let result;
-            if (format === 'csv') {
+            if (format.toLowerCase() === 'csv') {
                 result = await window.electronAPI.exportInvoicesToCSV(invoiceIds);
-            } else if (format === 'xlsx') {
+            } else {
                 result = await window.electronAPI.exportInvoicesToXLSX(invoiceIds);
             }
 
@@ -79,36 +85,25 @@ const SalesHistoryPage = ({ setActivePage, setSelectedInvoiceId }) => {
 
     return (
         <div className="p-6 bg-[#E9E9E9] h-full">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6">Sales History</h1>
-
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                    <div>
-                        <label className="block text-sm font-medium">Filter by Client</label>
-                        <select name="clientId" value={filters.clientId} onChange={handleFilterChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
-                            <option value="">All Clients</option>
-                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium">Filter by Representative</label>
-                        <select name="repId" value={filters.repId} onChange={handleFilterChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
-                            <option value="">All Reps</option>
-                            {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium">Filter by Month</label>
-                        <input type="month" name="month" value={filters.month} onChange={handleFilterChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"/>
-                    </div>
-                    <div className="flex space-x-2">
-                        <button onClick={() => handleExport('csv')} className="w-full bg-green-600 text-white px-4 py-2 rounded-md shadow hover:bg-green-700">
-                            Export CSV
-                        </button>
-                        <button onClick={() => handleExport('xlsx')} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md shadow hover:bg-blue-700">
-                            Export Excel
-                        </button>
-                    </div>
+                    <select name="clientId" value={filters.clientId} onChange={handleFilterChange} className="w-full p-2 border rounded">
+                        <option value="">All Clients</option>
+                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <select name="repId" value={filters.repId} onChange={handleFilterChange} className="w-full p-2 border rounded">
+                        <option value="">All Reps</option>
+                        {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
+                    <input type="month" name="month" value={filters.month} onChange={handleFilterChange} className="w-full p-2 border rounded"/>
+                    <select name="status" value={filters.status} onChange={handleFilterChange} className="w-full p-2 border rounded">
+                        <option value="">All Statuses</option>
+                        <option value="Draft">Draft</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                    <button onClick={handleExport} className="bg-blue-600 text-white px-4 py-2 rounded-md shadow hover:bg-blue-700">
+                        Export
+                    </button>
                 </div>
             </div>
 
@@ -125,8 +120,8 @@ const SalesHistoryPage = ({ setActivePage, setSelectedInvoiceId }) => {
                                 <th className="text-left p-3 font-semibold">Client Name</th>
                                 <th className="text-left p-3 font-semibold">Rep Name</th>
                                 <th className="text-left p-3 font-semibold">Date</th>
+                                <th className="text-left p-3 font-semibold">Status</th>
                                 <th className="text-right p-3 font-semibold">Amount</th>
-                                <th className="text-center p-3 font-semibold">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -136,10 +131,14 @@ const SalesHistoryPage = ({ setActivePage, setSelectedInvoiceId }) => {
                                     <td className="p-3">{invoice.client_name || 'N/A'}</td>
                                     <td className="p-3">{invoice.rep_name || 'N/A'}</td>
                                     <td className="p-3">{new Date(invoice.created_at).toLocaleDateString()}</td>
-                                    <td className="p-3 text-right">₹{invoice.final_amount.toFixed(2)}</td>
-                                    <td className="p-3 text-center">
-                                        <button onClick={() => handleViewDetails(invoice.id)} className="text-blue-600 hover:underline">View Details</button>
+                                    <td className="p-3">
+                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                            invoice.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                        }`}>
+                                            {invoice.status}
+                                        </span>
                                     </td>
+                                    <td className="p-3 text-right">₹{invoice.final_amount.toFixed(2)}</td>
                                 </tr>
                             ))}
                         </tbody>
