@@ -1,118 +1,106 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// (Your PrintableBill component can remain unchanged)
-const PrintableBill = React.forwardRef(({ billItems, clientName, invoiceNumber, totals }, ref) => {
+const PrintableBill = React.forwardRef(({ billItems, client, invoiceNumber, totals, paymentMode }, ref) => {
+    // This component remains the same
     return (
-        <div ref={ref} className="hidden print:block p-10">
-            <h2 className="text-center text-3xl font-bold mb-2">Pharmacy Invoice</h2>
-            <p className="text-center text-gray-600">Matrix Life Science, Tvs Tolgate, Trichy</p>
-            <hr className="my-6" />
-            <div className="flex justify-between mb-6">
+        <div ref={ref} className="hidden print:block p-10 font-sans text-sm">
+            <div className="text-center mb-6">
+                <h1 className="text-2xl font-bold">Matrix Life Science</h1>
+                <p>Tvs Tolgate, Trichy</p>
+            </div>
+            <div className="flex justify-between mb-4 border-b pb-2">
                 <div>
                     <p className="font-bold">Bill To:</p>
-                    <p>{clientName || 'N/A'}</p>
+                    <p>{client?.name || 'N/A'}</p>
+                    <p>{client?.address || ''}</p>
+                    <p>{client?.phone || ''}</p>
+                    <p>GSTIN: {client?.gstin || 'N/A'}</p>
                 </div>
-                <div>
-                    <p><span className="font-bold">Invoice Number:</span> <span>{invoiceNumber}</span></p>
-                    <p><span className="font-bold">Date:</span> <span>{new Date().toLocaleDateString()}</span></p>
+                <div className="text-right">
+                    <p><span className="font-bold">Invoice #:</span> {invoiceNumber}</p>
+                    <p><span className="font-bold">Date:</span> {new Date().toLocaleDateString()}</p>
+                    <p><span className="font-bold">Payment Mode:</span> {paymentMode}</p>
                 </div>
             </div>
-            <table className="min-w-full divide-y divide-gray-300">
+            <table className="min-w-full">
                 <thead>
-                    <tr>
-                        <th className="py-2 text-left text-sm font-semibold text-gray-900">Medicine</th>
-                        <th className="py-2 text-left text-sm font-semibold text-gray-900">Qty</th>
-                        <th className="py-2 text-left text-sm font-semibold text-gray-900">Free</th>
-                        <th className="py-2 text-left text-sm font-semibold text-gray-900">PTR</th>
-                        <th className="py-2 text-left text-sm font-semibold text-gray-900">Rate</th>
-                        <th className="py-2 text-right text-sm font-semibold text-gray-900">Amount</th>
+                    <tr className="border-b">
+                        <th className="py-2 text-left font-semibold">Medicine</th>
+                        <th className="py-2 text-left font-semibold">HSN</th>
+                        <th className="py-2 text-left font-semibold">Batch No</th>
+                        <th className="py-2 text-left font-semibold">Expiry</th>
+                        <th className="py-2 text-right font-semibold">Qty</th>
+                        <th className="py-2 text-right font-semibold">Rate</th>
+                        <th className="py-2 text-right font-semibold">Amount</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody>
                     {billItems.map((item, index) => (
-                         <tr key={`${item.id}-${index}`}>
-                            <td className="py-2">{item.name}</td>
-                            <td className="py-2">{item.quantity}</td>
-                            <td className="py-2">{item.free_quantity}</td>
-                            <td className="py-2">₹{item.ptr ? item.ptr.toFixed(2) : '0.00'}</td>
-                            <td className="py-2">₹{item.price.toFixed(2)}</td>
-                            <td className="py-2 text-right">₹{(item.price * item.quantity).toFixed(2)}</td>
+                         <tr key={`${item.id}-${index}`} className="border-b">
+                            <td className="py-1">{item.name}</td>
+                            <td className="py-1">{item.hsn}</td>
+                            <td className="py-1">{item.batch_number}</td>
+                            <td className="py-1">{item.expiry_date}</td>
+                            <td className="py-1 text-right">{item.quantity}</td>
+                            <td className="py-1 text-right">₹{item.price.toFixed(2)}</td>
+                            <td className="py-1 text-right">₹{(item.price * item.quantity).toFixed(2)}</td>
                         </tr>
                     ))}
                 </tbody>
-                <tfoot>
-                    <tr>
-                        <td colSpan="5" className="py-2 pt-4 text-right font-medium">Subtotal</td>
-                        <td className="py-2 pt-4 text-right font-semibold">₹{totals.subtotal.toFixed(2)}</td>
-                    </tr>
-                     <tr>
-                        <td colSpan="5" className="py-2 text-right font-medium">Tax (GST {totals.gstRate}%)</td>
-                        <td className="py-2 text-right font-semibold">₹{totals.tax.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                        <td colSpan="5" className="py-2 text-right font-bold text-lg">Grand Total</td>
-                        <td className="py-2 text-right font-bold text-lg">₹{totals.finalAmount.toFixed(2)}</td>
-                    </tr>
-                </tfoot>
             </table>
-            <p className="text-center text-sm text-gray-500 mt-8">Thank you for your business!</p>
+            <div className="flex justify-end mt-4">
+                <div className="w-1/3 space-y-1">
+                    <div className="flex justify-between"><span className="font-medium">Subtotal:</span><span>₹{totals.subtotal.toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span className="font-medium">Tax:</span><span>₹{totals.tax.toFixed(2)}</span></div>
+                    <div className="flex justify-between font-bold text-lg"><span >Final Total:</span><span>₹{totals.finalAmount.toFixed(2)}</span></div>
+                </div>
+            </div>
         </div>
     );
 });
 
 
 const BillingPage = () => {
-    // --- State for new client features ---
-    const [isNewClient, setIsNewClient] = useState(false);
-    const [newClientDetails, setNewClientDetails] = useState({ phone: '', address: '', GSTIN: '' });
     const [clientSuggestions, setClientSuggestions] = useState([]);
+    const [selectedClient, setSelectedClient] = useState(null);
+    const [clientSearch, setClientSearch] = useState('');
+    const [isNewClient, setIsNewClient] = useState(false);
+    const [newClientDetails, setNewClientDetails] = useState({ phone: '', address: '', gstin: '' });
     
-    // --- State for existing features ---
     const [salesReps, setSalesReps] = useState([]);
-    const [clientName, setClientName] = useState('');
-    const [clientId, setClientId] = useState(null);
-    const [salesRepId, setSalesRepId] = useState('');
-    const [gstRate, setGstRate] = useState(5);
-    const [ptr, setPtr] = useState('');
-    const [freeQuantity, setFreeQuantity] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [medicineSuggestions, setMedicineSuggestions] = useState([]);
-    const [selectedMedicine, setSelectedMedicine] = useState(null);
-    const [quantity, setQuantity] = useState(1);
-    const [billItems, setBillItems] = useState([]);
-    const [totals, setTotals] = useState({ subtotal: 0, tax: 0, finalAmount: 0, gstRate: 5 });
+    const [selectedRepId, setSelectedRepId] = useState('');
+
     const [invoiceNumber, setInvoiceNumber] = useState('');
+    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
     
+    const [medicineSuggestions, setMedicineSuggestions] = useState([]);
+    const [medicineSearch, setMedicineSearch] = useState('');
+    const [selectedMedicine, setSelectedMedicine] = useState(null);
+    const [itemDetails, setItemDetails] = useState({ hsn: '', batch_number: '', expiry_date: '', ptr: '', quantity: 1, available_stock: '' });
+
+    const [billItems, setBillItems] = useState([]);
+    const [totals, setTotals] = useState({ subtotal: 0, tax: 0, finalAmount: 0 });
+    const [paymentMode, setPaymentMode] = useState('Credit');
+
     const printableComponentRef = useRef();
-    const quantityInputRef = useRef();
 
-    // --- Data Fetching ---
     useEffect(() => {
-        const fetchReps = async () => {
-            const fetchedReps = await window.electronAPI.getAllSalesReps();
-            setSalesReps(fetchedReps);
+        const fetchInitialData = async () => {
+            const newInvoiceNum = await window.electronAPI.generateInvoiceNumber();
+            setInvoiceNumber(newInvoiceNum);
+            const repsData = await window.electronAPI.getAllSalesReps();
+            setSalesReps(repsData);
         };
-        fetchReps();
+        fetchInitialData();
     }, []);
 
-    const fetchInvoiceNumber = useCallback(async () => {
-        const newInvoiceNum = await window.electronAPI.generateInvoiceNumber();
-        setInvoiceNumber(newInvoiceNum);
-    }, []);
-
-    useEffect(() => {
-        fetchInvoiceNumber();
-    }, [fetchInvoiceNumber]);
-    
-    // --- Client Search Logic ---
     const handleClientSearch = useCallback(async (query) => {
-        setClientName(query);
-        setClientId(null); // Reset client ID when searching
-        if (query.length > 0) {
+        setClientSearch(query);
+        setSelectedClient(null);
+        if (query.length > 1) {
             const results = await window.electronAPI.searchParties(query);
             setClientSuggestions(results);
-            const exactMatch = results.find(c => c.name.toLowerCase() === query.toLowerCase());
-            setIsNewClient(!exactMatch);
+            setIsNewClient(results.length === 0);
         } else {
             setClientSuggestions([]);
             setIsNewClient(false);
@@ -120,62 +108,15 @@ const BillingPage = () => {
     }, []);
 
     const handleSelectClient = (client) => {
-        setClientName(client.name);
-        setClientId(client.id);
+        setSelectedClient(client);
+        setClientSearch(client.name);
         setClientSuggestions([]);
         setIsNewClient(false);
     };
-
-    // --- New Client Details Handler ---
-    const handleNewClientChange = (e) => {
-        const { name, value } = e.target;
-        setNewClientDetails(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleSaveNewClient = async () => {
-        if (!clientName?.trim()) {
-            console.error("Please enter a name for the new client.");
-            return;
-        }
-
-        try {
-            const newParty = {
-                name: clientName.trim(),
-                address: newClientDetails.address.trim(),
-                phone: newClientDetails.phone.trim(),
-                gstin: newClientDetails.GSTIN.trim(),
-            };
-
-            await window.electronAPI.addParty(newParty);
-            
-            // This is a non-blocking notification
-            console.log(`Client "${clientName}" saved successfully!`);
-
-            const savedClient = await window.electronAPI.getPartyByName(newParty.name);
-            if (savedClient) {
-                handleSelectClient(savedClient);
-            } else {
-                setIsNewClient(false);
-            }
-
-        } catch (error) {
-            console.error("Failed to save new client:", error);
-            // This is a non-blocking notification
-            console.log(error.message || "Failed to save client. A client with this name may already exist.");
-        }
-    };
     
-    // --- Other Handlers & Effects ---
-    useEffect(() => {
-        const subtotal = billItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        const tax = subtotal * (gstRate / 100);
-        const finalAmount = subtotal + tax;
-        setTotals({ subtotal, tax, finalAmount, gstRate });
-    }, [billItems, gstRate]);
-
     const handleMedicineSearch = useCallback(async (query) => {
-        setSearchQuery(query);
-        if (query.length > 0) {
+        setMedicineSearch(query);
+        if (query.length > 1) {
             const results = await window.electronAPI.searchMedicines(query);
             setMedicineSuggestions(results);
         } else {
@@ -185,184 +126,178 @@ const BillingPage = () => {
 
     const handleSelectMedicine = (med) => {
         setSelectedMedicine(med);
-        setSearchQuery(med.name);
+        setMedicineSearch(med.name);
+        setItemDetails({
+            hsn: med.hsn || '',
+            batch_number: med.batch_number || '',
+            expiry_date: med.expiry_date || '',
+            ptr: med.price || '',
+            quantity: 1,
+            available_stock: med.stock
+        });
         setMedicineSuggestions([]);
-        quantityInputRef.current?.focus();
     };
-
+    
     const handleAddItem = () => {
-        if (!selectedMedicine || !quantity || Number(quantity) <= 0) {
-            console.error("Please select a valid medicine and quantity."); return;
-        }
-        const totalStockNeeded = Number(quantity) + Number(freeQuantity || 0);
-        if (totalStockNeeded > selectedMedicine.stock) {
-            console.error(`Cannot add item. Only ${selectedMedicine.stock} units are in stock.`); return;
-        }
-        const newItem = { ...selectedMedicine, quantity: Number(quantity), free_quantity: Number(freeQuantity || 0), ptr: Number(ptr || 0) };
-        setBillItems(prevItems => [...prevItems, newItem]);
-        setSearchQuery(''); setSelectedMedicine(null); setQuantity(1); setFreeQuantity(''); setPtr('');
+        if (!selectedMedicine) { console.error("No medicine selected"); return; }
+        
+        const newItem = {
+            ...selectedMedicine,
+            ...itemDetails,
+            price: Number(itemDetails.ptr), // Use the editable PTR as the final price
+            quantity: Number(itemDetails.quantity)
+        };
+        setBillItems(prev => [...prev, newItem]);
+
+        setMedicineSearch('');
+        setSelectedMedicine(null);
+        setItemDetails({ hsn: '', batch_number: '', expiry_date: '', ptr: '', quantity: 1, available_stock: '' });
     };
 
-    const handleRemoveItem = (indexToRemove) => {
-        setBillItems(prevItems => prevItems.filter((_, index) => index !== indexToRemove));
+    const handleRemoveItem = (index) => {
+        setBillItems(items => items.filter((_, i) => i !== index));
     };
 
-    const resetForm = useCallback(() => {
-        setClientName(''); 
-        setClientId(null);
-        setSalesRepId(''); 
-        setBillItems([]); 
-        setGstRate(5); 
-        setIsNewClient(false); 
-        setNewClientDetails({ phone: '', address: '', GSTIN: '' });
-        fetchInvoiceNumber();
-    }, [fetchInvoiceNumber]);
+    useEffect(() => {
+        const subtotal = billItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+        const tax = subtotal * 0.05; // 5% GST
+        const finalAmount = Math.round(subtotal + tax);
+        setTotals({ subtotal, tax, finalAmount });
+    }, [billItems]);
 
-    const handleSaveInvoice = async () => {
-        if (billItems.length === 0 || !clientName || !clientId) {
-            console.error("Please select a client and add items to the invoice.");
-            return;
+    const handleSaveInvoice = async (status) => {
+        if (!clientSearch.trim()) { console.error("Client name is required"); return; }
+        if (billItems.length === 0) { console.error("No items in bill"); return; }
+
+        let clientId = selectedClient?.id;
+        if (isNewClient) {
+            const newParty = await window.electronAPI.addParty({ name: clientSearch, ...newClientDetails });
+            clientId = newParty.id;
         }
+
         const invoiceData = {
-            invoice_number: invoiceNumber, 
-            client_id: clientId, // Use client ID
-            sales_rep_id: salesRepId,
-            total_amount: totals.subtotal, 
-            tax: totals.tax, 
+            invoice_number: invoiceNumber,
+            client_id: clientId,
+            sales_rep_id: selectedRepId || null,
+            total_amount: totals.subtotal,
+            tax: totals.tax,
             final_amount: totals.finalAmount,
+            payment_mode: paymentMode,
+            status: status,
             items: billItems.map(item => ({
-                medicine_id: item.id, 
-                quantity: item.quantity, 
-                free_quantity: item.free_quantity,
-                unit_price: item.price, 
-                ptr: item.ptr, 
+                medicine_id: item.id,
+                hsn: item.hsn,
+                quantity: item.quantity,
+                free_quantity: 0,
+                unit_price: item.price,
+                ptr: item.ptr,
                 total_price: item.price * item.quantity
             }))
         };
+        
         try {
             await window.electronAPI.createInvoice(invoiceData);
-            console.log(`Invoice ${invoiceNumber} saved successfully!`);
-            handlePrint(); 
-            resetForm();
+            if (status === 'Completed') {
+                handlePrint();
+            }
+            // Reset form
+            setClientSearch(''); setSelectedClient(null); setBillItems([]); setPaymentMode('Credit'); setSelectedRepId('');
+            const newNum = await window.electronAPI.generateInvoiceNumber();
+            setInvoiceNumber(newNum);
         } catch (error) {
-            console.error("Failed to save invoice:", error); 
+            console.error("Failed to save invoice:", error);
         }
     };
-
+    
     const handlePrint = () => {
-        const printContent = printableComponentRef.current.innerHTML;
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(`<html><head><title>Print Invoice</title><script src="https://cdn.tailwindcss.com"></script></head><body>${printContent}</body></html>`);
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
+        setTimeout(() => window.print(), 500);
     };
 
     return (
-        <div className="p-6 bg-[#E9E9E9] h-full">
-            <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="p-0"> {/* Changed padding to 0 */}
+            <div className="bg-white rounded-lg p-6"> {/* Removed shadow */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="relative">
-                        <label className="block text-sm font-medium text-gray-700">Select or Enter Client Name</label>
-                        <input type="text" value={clientName} onChange={(e) => handleClientSearch(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        <label className="text-sm font-medium">Client</label>
+                        <input type="text" value={clientSearch} onChange={(e) => handleClientSearch(e.target.value)} className="w-full p-2 border rounded"/>
                         {clientSuggestions.length > 0 && (
-                            <div className="absolute z-20 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
-                                {clientSuggestions.map(client => <div key={client.id} onClick={() => handleSelectClient(client)} className="p-2 hover:bg-gray-100 cursor-pointer">{client.name}</div>)}
+                            <div className="absolute z-20 w-full bg-white border rounded mt-1 shadow-lg">
+                                {clientSuggestions.map(c => <div key={c.id} onClick={() => handleSelectClient(c)} className="p-2 hover:bg-gray-100 cursor-pointer">{c.name}</div>)}
                             </div>
                         )}
+                        {selectedClient && <div className="text-xs text-gray-500 mt-1">GSTIN: {selectedClient.gstin} | Phone: {selectedClient.phone}</div>}
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Sales Representative</label>
-                        <select value={salesRepId} onChange={(e) => setSalesRepId(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
-                            <option value="">Select Representative</option>
-                            {salesReps.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Total GST (%)</label>
-                        <input type="number" value={gstRate} onChange={(e) => setGstRate(Number(e.target.value))} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-                    </div>
+                    <div><label className="text-sm font-medium">Invoice Number</label><input type="text" value={invoiceNumber} readOnly className="w-full p-2 border rounded bg-gray-100"/></div>
+                    <div><label className="text-sm font-medium">Invoice Date</label><input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className="w-full p-2 border rounded"/></div>
                 </div>
 
                 {isNewClient && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6 p-4 border border-blue-200 rounded-lg bg-blue-50 transition-all duration-300">
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700">Address</label>
-                            <input type="text" name="address" value={newClientDetails.address} onChange={handleNewClientChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Contact No</label>
-                            <input type="text" name="phone" value={newClientDetails.phone} onChange={handleNewClientChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-                        </div>
-                        <div>
-                           <label className="block text-sm font-medium text-gray-700">GSTIN</label>
-                           <input type="text" name="GSTIN" value={newClientDetails.GSTIN} onChange={handleNewClientChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-                        </div>
-                        <div className="col-span-full text-right">
-                           <button onClick={handleSaveNewClient} className="bg-blue-600 text-white py-2 px-4 rounded-md shadow">Save New Client</button>
-                        </div>
+                     <div className="grid grid-cols-3 gap-4 mb-4 p-4 border rounded border-blue-200 bg-blue-50">
+                        <input type="text" placeholder="Phone" value={newClientDetails.phone} onChange={e => setNewClientDetails({...newClientDetails, phone: e.target.value})} className="p-2 border rounded"/>
+                        <input type="text" placeholder="GSTIN" value={newClientDetails.gstin} onChange={e => setNewClientDetails({...newClientDetails, gstin: e.target.value})} className="p-2 border rounded"/>
+                        <input type="text" placeholder="Address" value={newClientDetails.address} onChange={e => setNewClientDetails({...newClientDetails, address: e.target.value})} className="p-2 border rounded"/>
                     </div>
                 )}
-
-                <div className="grid grid-cols-12 gap-4 items-end border-t pt-6">
-                    <div className="col-span-4 relative">
-                        <label className="block text-sm font-medium text-gray-700">Select Medicine</label>
-                        <input type="text" value={searchQuery} onChange={(e) => handleMedicineSearch(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" autoComplete="off" />
+                
+                <div className="grid grid-cols-9 gap-2 items-end p-2 border-t mt-4">
+                    <div className="col-span-2 relative"><label className="text-xs">Select Medicine</label><input type="text" value={medicineSearch} onChange={e => handleMedicineSearch(e.target.value)} className="w-full p-2 border rounded"/>
                         {medicineSuggestions.length > 0 && (
-                            <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
-                                {medicineSuggestions.map(med => <div key={med.id} onClick={() => handleSelectMedicine(med)} className="p-2 hover:bg-gray-100 cursor-pointer">{med.name} (Stock: {med.stock})</div>)}
+                            <div className="absolute z-20 w-full bg-white border rounded mt-1 shadow-lg max-h-48 overflow-y-auto">
+                                {medicineSuggestions.map(m => <div key={m.id} onClick={() => handleSelectMedicine(m)} className="p-2 hover:bg-gray-100 cursor-pointer">{m.name}</div>)}
                             </div>
                         )}
                     </div>
-                    <div className="col-span-2"><label className="block text-sm font-medium text-gray-700">P.T.R.</label><input type="number" value={ptr} onChange={(e) => setPtr(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
-                    <div className="col-span-2"><label className="block text-sm font-medium text-gray-700">Quantity</label><input ref={quantityInputRef} type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} min="1" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
-                    <div className="col-span-2"><label className="block text-sm font-medium text-gray-700">Free</label><input type="number" value={freeQuantity} onChange={(e) => setFreeQuantity(e.target.value)} min="0" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" /></div>
-                    <div className="col-span-2"><button onClick={handleAddItem} className="w-full bg-green-600 text-white py-2 px-4 rounded-md shadow">Add to Invoice</button></div>
+                    <div><label className="text-xs">HSN</label><input type="text" value={itemDetails.hsn} readOnly className="w-full p-2 border rounded bg-gray-100"/></div>
+                    <div><label className="text-xs">Batch No</label><input type="text" value={itemDetails.batch_number} readOnly className="w-full p-2 border rounded bg-gray-100"/></div>
+                    <div><label className="text-xs">Expiry</label><input type="text" value={itemDetails.expiry_date} readOnly className="w-full p-2 border rounded bg-gray-100"/></div>
+                    <div><label className="text-xs">PTR</label><input type="number" value={itemDetails.ptr} onChange={e => setItemDetails({...itemDetails, ptr: e.target.value})} className="w-full p-2 border rounded"/></div>
+                    <div><label className="text-xs">Qty</label><input type="number" value={itemDetails.quantity} onChange={e => setItemDetails({...itemDetails, quantity: e.target.value})} className="w-full p-2 border rounded"/></div>
+                    <div><label className="text-xs">Available</label><input type="text" value={itemDetails.available_stock} readOnly className="w-full p-2 border rounded bg-gray-100"/></div>
+                    <div><button onClick={handleAddItem} className="w-full bg-green-500 text-white p-2 rounded">Add</button></div>
                 </div>
 
-                <div className="mt-6">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Medicine</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Free</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rate</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                             {billItems.map((item, index) => (
-                                <tr key={`${item.id}-${index}`}>
-                                    <td className="px-6 py-4 whitespace-nowrap">{item.name}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{item.quantity}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{item.free_quantity}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">₹{item.price.toFixed(2)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right">₹{(item.price * item.quantity).toFixed(2)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                                        <button onClick={() => handleRemoveItem(index)} className="text-red-600 hover:text-red-800">Remove</button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                <table className="w-full mt-4 text-sm">
+                    <thead><tr className="border-b"><th className="p-1 text-left">MEDICINE</th><th className="p-1 text-left">HSN</th><th className="p-1 text-left">BATCH NO</th><th className="p-1 text-right">QTY</th><th className="p-1 text-right">RATE</th><th className="p-1 text-right">AMOUNT</th><th className="p-1"></th></tr></thead>
+                    <tbody>
+                        {billItems.map((item, i) => (
+                            <tr key={i} className="border-b hover:bg-gray-50"><td className="p-1">{item.name}</td><td className="p-1">{item.hsn}</td><td className="p-1">{item.batch_number}</td><td className="p-1 text-right">{item.quantity}</td><td className="p-1 text-right">₹{item.price.toFixed(2)}</td><td className="p-1 text-right">₹{(item.price * item.quantity).toFixed(2)}</td><td className="p-1 text-center"><button onClick={() => handleRemoveItem(i)} className="text-red-500">X</button></td></tr>
+                        ))}
+                    </tbody>
+                </table>
 
-                <div className="flex justify-end mt-6 pt-6 border-t">
-                    <div className="w-full max-w-sm space-y-2">
-                         <div className="flex justify-between"><span className="font-medium">Subtotal:</span><span>₹{totals.subtotal.toFixed(2)}</span></div>
-                         <div className="flex justify-between"><span className="font-medium">Tax (GST {totals.gstRate}%):</span><span>₹{totals.tax.toFixed(2)}</span></div>
-                         <div className="flex justify-between text-lg font-bold"><span >Grand Total:</span><span>₹{totals.finalAmount.toFixed(2)}</span></div>
-                         <button onClick={handleSaveInvoice} className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-md shadow hover:bg-blue-700" style={{ backgroundColor: '#31708E' }}>Save & Print Invoice</button>
+                <div className="flex justify-between items-end mt-4 pt-4 border-t">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-sm font-medium">Payment Mode</label>
+                            <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="w-full p-2 border rounded">
+                                <option>Credit</option><option>Cash</option><option>Online</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Sales Representative</label>
+                            <select value={selectedRepId} onChange={e => setSelectedRepId(e.target.value)} className="w-full p-2 border rounded">
+                                <option value="">None</option>
+                                {salesReps.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="w-1/3 text-right space-y-1">
+                        <div className="flex justify-between"><span>Subtotal:</span><span>₹{totals.subtotal.toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span>Tax (GST):</span><span>₹{totals.tax.toFixed(2)}</span></div>
+                        <div className="flex justify-between font-bold text-lg"><span>Final Total:</span><span>₹{totals.finalAmount.toFixed(2)}</span></div>
                     </div>
                 </div>
+                <div className="flex justify-end space-x-2 mt-4">
+                    <button onClick={() => handleSaveInvoice('Draft')} className="bg-gray-600 text-white px-4 py-2 rounded">Save Draft</button>
+                    <button onClick={() => handleSaveInvoice('Completed')} className="bg-blue-600 text-white px-4 py-2 rounded">Save & Print</button>
+                </div>
             </div>
-            <div className="hidden">
-                 <PrintableBill ref={printableComponentRef} billItems={billItems} clientName={clientName} invoiceNumber={invoiceNumber} totals={totals} />
+            <div className="hidden print:block">
+                <PrintableBill ref={printableComponentRef} billItems={billItems} client={selectedClient} invoiceNumber={invoiceNumber} totals={totals} paymentMode={paymentMode} />
             </div>
         </div>
     );
 };
 
 export default BillingPage;
+
