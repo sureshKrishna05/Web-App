@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>;
 
 // --- Reusable Modal for Add/Edit Supplier ---
 const SupplierModal = ({ isOpen, onClose, onSave, item }) => {
@@ -161,11 +162,10 @@ const SuppliersPage = () => {
 
     return (
         <div className="p-6 bg-[#E9E9E9] h-full">
-            <div className="flex justify-end mb-6">
-                <button
-                    onClick={() => handleOpenModal()}
-                    className="bg-blue-600 text-white px-6 py-2 rounded-md shadow"
-                >
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl font-bold text-gray-800"></h1>
+                <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out shadow-md">
+                    <IconPlus />
                     Add New Supplier
                 </button>
             </div>

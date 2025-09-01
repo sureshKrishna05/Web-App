@@ -34,8 +34,6 @@ const navItems = [
     { name: 'Reports', icon: <IconReports /> },
 ];
 
-// --- The old, duplicate Page Components have been removed ---
-
 // --- Sidebar Component (No change) ---
 const Sidebar = ({ activePage, setActivePage }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
@@ -74,11 +72,11 @@ const Sidebar = ({ activePage, setActivePage }) => {
 };
 
 // --- UPDATED: MainContent Component ---
-const MainContent = ({ page }) => {
+const MainContent = ({ page, setActivePage }) => {
     const renderPage = () => {
         switch (page) {
-            case 'Dashboard': return <DashboardPage />;
-            case 'Settings': return <SettingsPage />;
+            case 'Dashboard': return <DashboardPage setActivePage={setActivePage} />;
+            case 'Settings': return <div/>; /* Placeholder for SettingsPage */
             case 'Items': return <ItemsPage />;
             case 'New Invoice': return <BillingPage />;
             case 'Clients': return <PartiesPage />;
@@ -86,7 +84,7 @@ const MainContent = ({ page }) => {
             case 'Sales History': return <SalesHistoryPage/>;
             case 'Reports': return <EmployeesPage/>;
             case 'Employee': return <ManageEmployeesPage/>;
-            default: return <PlaceholderPage pageName={page} />;
+            default: return <div>Page not found: {page}</div>;
         }
     };
     return (
@@ -98,13 +96,14 @@ const MainContent = ({ page }) => {
     );
 };
 
-// --- Main App Component (No change) ---
+// --- Main App Component (UPDATED) ---
 export default function App() {
     const [activePage, setActivePage] = useState('Dashboard');
     return (
         <div className="flex flex-row h-screen w-screen overflow-hidden">
             <Sidebar activePage={activePage} setActivePage={setActivePage} />
-            <MainContent page={activePage} />
+            <MainContent page={activePage} setActivePage={setActivePage} />
         </div>
     );
 }
+
