@@ -1,4 +1,4 @@
- import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
     const [formData, setFormData] = useState({
@@ -8,41 +8,73 @@ const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
         batch_number: '',
         expiry_date: '',
         price: '',
-        stock: ''
+        stock: '',
+        gst_percentage: 0
     });
+    const [groups, setGroups] = useState([]);
+    const [isGstEditable, setIsGstEditable] = useState(true);
     const [error, setError] = useState('');
 
     useEffect(() => {
-        if (item) {
-            // EDIT MODE: Pre-fill form with existing item data
-            setFormData({
-                name: item.name || '',
-                hsn: item.hsn || '',
-                item_code: item.item_code || '',
-                batch_number: item.batch_number || '',
-                expiry_date: item.expiry_date || '',
-                price: item.price || '',
-                stock: item.stock || ''
-            });
-        } else {
-            // ADD MODE: Clear the form for a new entry
-            setFormData({
-                name: '', hsn: '', item_code: '', batch_number: '',
-                expiry_date: '', price: '', stock: ''
-            });
+        const fetchGroups = async () => {
+            try {
+                const groupsData = await window.electronAPI.getAllGroups();
+                setGroups(groupsData);
+            } catch (err) {
+                console.error("Failed to fetch groups:", err);
+            }
+        };
+
+        if (isOpen) {
+            fetchGroups();
+            if (item) {
+                // EDIT MODE
+                setFormData({
+                    name: item.name || '',
+                    hsn: item.hsn || '',
+                    item_code: item.item_code || '',
+                    batch_number: item.batch_number || '',
+                    expiry_date: item.expiry_date || '',
+                    price: item.price || '',
+                    stock: item.stock || '',
+                    gst_percentage: item.gst_percentage || 0 // GST would need to be passed with the item object
+                });
+                // When editing, if HSN exists, GST is not editable
+                const existingGroup = groups.find(g => g.hsn_code === item.hsn);
+                setIsGstEditable(!existingGroup);
+
+            } else {
+                // ADD MODE
+                setFormData({
+                    name: '', hsn: '', item_code: '', batch_number: '',
+                    expiry_date: '', price: '', stock: '', gst_percentage: 0
+                });
+                setIsGstEditable(true);
+            }
         }
     }, [item, isOpen]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const newFormData = { ...formData, [name]: value };
+
+        if (name === 'hsn') {
+            const existingGroup = groups.find(g => g.hsn_code === value);
+            if (existingGroup) {
+                newFormData.gst_percentage = existingGroup.gst_percentage;
+                setIsGstEditable(false);
+            } else {
+                setIsGstEditable(true);
+            }
+        }
+        setFormData(newFormData);
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
         // Basic validation
-        if (!formData.name || !formData.price || !formData.stock) {
-            setError('Please fill out all required fields: Name, Price, and Stock.');
+        if (!formData.name || !formData.price || !formData.stock || !formData.hsn) {
+            setError('Please fill out all required fields: Name, HSN, Price, and Stock.');
             return;
         }
         setError('');
@@ -69,9 +101,8 @@ const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">HSN Number</label>
-                                <input type="text" name="hsn" value={formData.hsn} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                                <input type="text" name="hsn" value={formData.hsn} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
                             </div>
-                            {/* Item Code is now only shown when editing an existing item */}
                             {item && (
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Item Code</label>
@@ -87,6 +118,10 @@ const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
                         {/* Column 2 */}
                         <div className="space-y-4">
                             <div>
+                                <label className="block text-sm font-medium text-gray-700">GST (%)</label>
+                                <input type="number" step="0.01" name="gst_percentage" value={formData.gst_percentage} onChange={handleChange} readOnly={!isGstEditable} className={`mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md ${!isGstEditable ? 'bg-gray-100' : ''}`} />
+                            </div>
+                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Expiry Date</label>
                                 <input type="date" name="expiry_date" value={formData.expiry_date} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                             </div>
@@ -118,3 +153,4 @@ const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
 };
 
 export default AddItemModal;
+
