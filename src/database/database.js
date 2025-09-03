@@ -37,7 +37,7 @@ class DatabaseService {
             );
         `);
 
-        // --- NEW: Item Groups Table ---
+        // --- Item Groups Table ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS item_groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,7 +46,7 @@ class DatabaseService {
             );
         `);
 
-        // Medicines table (now the single source for inventory) - UPDATED
+        // Medicines table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS medicines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +64,7 @@ class DatabaseService {
             );
         `);
 
-        // Sales reps table
+        // Sales reps
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS sales_reps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,12 +76,12 @@ class DatabaseService {
             );
         `);
 
-        // Table for Sales Rep Targets
+        // Sales targets
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS sales_targets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rep_id INTEGER NOT NULL,
-                month TEXT NOT NULL, -- Format: YYYY-MM
+                month TEXT NOT NULL,
                 target_amount REAL NOT NULL,
                 achieved_amount REAL DEFAULT 0,
                 FOREIGN KEY (rep_id) REFERENCES sales_reps (id) ON DELETE CASCADE,
@@ -105,7 +105,7 @@ class DatabaseService {
             )
         `);
 
-        // Invoice items table
+        // Invoice items
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoice_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,7 +187,6 @@ class DatabaseService {
     getAllSalesReps() {
         return this.db.prepare('SELECT * FROM sales_reps ORDER BY name').all();
     }
-
     addSalesRep(employee) {
         const stmt = this.db.prepare(`
             INSERT INTO sales_reps (name, dob, contact_number, employee_type, date_of_joining) 
@@ -196,14 +195,12 @@ class DatabaseService {
         const result = stmt.run(employee);
         return { id: result.lastInsertRowid, ...employee };
     }
-
     deleteSalesRep(id) {
         return this.db.prepare('DELETE FROM sales_reps WHERE id = ?').run(id).changes > 0;
     }
 
-
     // --- Employee/Sales Rep Performance ---
-    getRepPerformance(repId, month) { // month in YYYY-MM format
+    getRepPerformance(repId, month) {
         const stmt = this.db.prepare(`
             SELECT 
                 s.name,
@@ -216,7 +213,6 @@ class DatabaseService {
         `);
         return stmt.get(month, repId);
     }
-    
     setRepTarget(repId, month, targetAmount) {
         const stmt = this.db.prepare(`
             INSERT INTO sales_targets (rep_id, month, target_amount, achieved_amount) 
@@ -227,15 +223,18 @@ class DatabaseService {
         return stmt.run(repId, month, targetAmount);
     }
 
-    // --- NEW: Group Management Functions ---
+    // --- Group Management Functions ---
     getAllGroups() {
         return this.db.prepare('SELECT * FROM item_groups ORDER BY hsn_code').all();
     }
-
     getGroupByHSN(hsn) {
         return this.db.prepare('SELECT * FROM item_groups WHERE hsn_code = ?').get(hsn);
     }
-
+    addGroup({ hsn_code, gst_percentage = 0 }) {
+        const stmt = this.db.prepare('INSERT INTO item_groups (hsn_code, gst_percentage) VALUES (?, ?)');
+        const result = stmt.run(hsn_code, gst_percentage);
+        return { id: result.lastInsertRowid, hsn_code, gst_percentage };
+    }
     updateGroupGst(id, gst_percentage) {
         return this.db.prepare('UPDATE item_groups SET gst_percentage = ? WHERE id = ?').run(gst_percentage, id).changes > 0;
     }
@@ -243,7 +242,7 @@ class DatabaseService {
     // ---------------- Invoices ----------------
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
-             let partyId = invoice.client_id;
+            let partyId = invoice.client_id;
             if (!partyId) {
                 let party = this.db.prepare('SELECT id FROM parties WHERE name = ?').get(invoice.client_name);
                 if (!party) {
@@ -279,7 +278,7 @@ class DatabaseService {
             }
 
             if (invoice.sales_rep_id) {
-                const month = new Date(invoice.created_at || Date.now()).toISOString().slice(0, 7); // "YYYY-MM"
+                const month = new Date(invoice.created_at || Date.now()).toISOString().slice(0, 7);
                 const updateTargetStmt = this.db.prepare(`
                     INSERT INTO sales_targets (rep_id, month, target_amount, achieved_amount)
                     VALUES (@rep_id, @month, 0, @final_amount)
@@ -337,7 +336,7 @@ class DatabaseService {
         }
         return invoice;
     }
-    
+
     getFilteredInvoices(filters) {
         let query = `
             SELECT 
@@ -355,23 +354,11 @@ class DatabaseService {
         const whereClauses = [];
         const params = [];
 
-        if (filters.clientId) {
-            whereClauses.push('i.client_id = ?');
-            params.push(filters.clientId);
-        }
-        if (filters.repId) {
-            whereClauses.push('i.sales_rep_id = ?');
-            params.push(filters.repId);
-        }
-        if (filters.month) {
-            whereClauses.push("strftime('%Y-%m', i.created_at) = ?");
-            params.push(filters.month);
-        }
+        if (filters.clientId) { whereClauses.push('i.client_id = ?'); params.push(filters.clientId); }
+        if (filters.repId) { whereClauses.push('i.sales_rep_id = ?'); params.push(filters.repId); }
+        if (filters.month) { whereClauses.push("strftime('%Y-%m', i.created_at) = ?"); params.push(filters.month); }
 
-        if (whereClauses.length > 0) {
-            query += ' WHERE ' + whereClauses.join(' AND ');
-        }
-
+        if (whereClauses.length > 0) { query += ' WHERE ' + whereClauses.join(' AND '); }
         query += ' ORDER BY i.created_at DESC';
 
         return this.db.prepare(query).all(params);
@@ -400,7 +387,6 @@ class DatabaseService {
         return this.db.prepare(query).all(invoiceIds);
     }
 
-
     // ---------------- Medicines CRUD ----------------
     getAllMedicines() {
         return this.db.prepare('SELECT * FROM medicines ORDER BY name').all();
@@ -409,6 +395,7 @@ class DatabaseService {
         return this.db.prepare('SELECT * FROM medicines WHERE name LIKE ? ORDER BY name').all(`%${searchTerm}%`);
     }
     addMedicine(medicine) {
+        // Resolve group by HSN (create if missing when gst provided)
         let groupId = null;
         if (medicine.hsn) {
             let group = this.getGroupByHSN(medicine.hsn);
@@ -427,19 +414,39 @@ class DatabaseService {
         `);
         const result = stmt.run({ ...medicine, group_id: groupId });
         const newItemId = result.lastInsertRowid;
-        
+
         const itemCode = `ITEM-${String(newItemId).padStart(4, '0')}`;
         this.db.prepare('UPDATE medicines SET item_code = ? WHERE id = ?').run(itemCode, newItemId);
-        
+
         return { id: newItemId };
     }
     updateMedicine(id, medicine) {
-        return this.db.prepare(`
+        // Re-resolve group_id when HSN changes or provided
+        let groupId = null;
+        if (medicine.hsn) {
+            let group = this.getGroupByHSN(medicine.hsn);
+            if (!group && typeof medicine.gst_percentage !== 'undefined') {
+                const res = this.db.prepare('INSERT INTO item_groups (hsn_code, gst_percentage) VALUES (?, ?)')
+                                   .run(medicine.hsn, medicine.gst_percentage || 0);
+                groupId = res.lastInsertRowid;
+            } else if (group) {
+                groupId = group.id;
+            }
+        }
+
+        const stmt = this.db.prepare(`
             UPDATE medicines
-            SET name = @name, hsn = @hsn, batch_number = @batch_number, expiry_date = @expiry_date, 
-            price = @price, stock = @stock, updated_at = CURRENT_TIMESTAMP
+            SET name = @name,
+                hsn = @hsn,
+                batch_number = @batch_number,
+                expiry_date = @expiry_date,
+                price = @price,
+                stock = @stock,
+                group_id = COALESCE(@group_id, group_id),
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = @id
-        `).run({ id, ...medicine }).changes > 0;
+        `);
+        return stmt.run({ id, ...medicine, group_id: groupId }).changes > 0;
     }
     deleteMedicine(id) {
         return this.db.prepare('DELETE FROM medicines WHERE id = ?').run(id).changes > 0;
@@ -469,4 +476,3 @@ class DatabaseService {
 }
 
 module.exports = DatabaseService;
-

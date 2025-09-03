@@ -32,7 +32,7 @@ const ItemsPage = () => {
             setMedicines(data);
         } catch (err) {
             setError(err.message);
-            console.error("Failed to fetch medicines:", err);
+            console.error('Failed to fetch medicines:', err);
         } finally {
             setLoading(false);
         }
@@ -62,7 +62,7 @@ const ItemsPage = () => {
             fetchMedicines();
             handleCloseModal();
         } catch (err) {
-            console.error("Failed to save item:", err);
+            console.error('Failed to save item:', err);
         }
     };
 
@@ -72,7 +72,7 @@ const ItemsPage = () => {
                 await window.electronAPI.deleteMedicine(id);
                 fetchMedicines();
             } catch (err) {
-                console.error("Failed to delete item:", err);
+                console.error('Failed to delete item:', err);
                 alert('Failed to delete item. Please try again.');
             }
         }
@@ -118,7 +118,7 @@ const ItemsPage = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.batch_number}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.expiry_date}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{item.price.toFixed(2)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{Number(item.price).toFixed(2)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.stock}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <div className="flex justify-end space-x-4">

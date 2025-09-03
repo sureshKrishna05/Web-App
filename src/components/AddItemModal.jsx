@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
     const [formData, setFormData] = useState({
@@ -9,76 +9,108 @@ const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
         expiry_date: '',
         price: '',
         stock: '',
-        gst_percentage: 0
+        gst_percentage: ''
     });
+
     const [groups, setGroups] = useState([]);
+    const [selectedGroupHsn, setSelectedGroupHsn] = useState('');
     const [isGstEditable, setIsGstEditable] = useState(true);
     const [error, setError] = useState('');
 
+    const sortedGroups = useMemo(() => {
+        return [...groups].sort((a, b) => String(a.hsn_code).localeCompare(String(b.hsn_code)));
+    }, [groups]);
+
     useEffect(() => {
-        const fetchGroups = async () => {
+        if (!isOpen) return;
+        (async () => {
             try {
                 const groupsData = await window.electronAPI.getAllGroups();
-                setGroups(groupsData);
+                setGroups(Array.isArray(groupsData) ? groupsData : []);
             } catch (err) {
-                console.error("Failed to fetch groups:", err);
+                console.error('Failed to fetch groups:', err);
             }
-        };
+        })();
+    }, [isOpen]);
 
-        if (isOpen) {
-            fetchGroups();
-            if (item) {
-                // EDIT MODE
-                setFormData({
-                    name: item.name || '',
-                    hsn: item.hsn || '',
-                    item_code: item.item_code || '',
-                    batch_number: item.batch_number || '',
-                    expiry_date: item.expiry_date || '',
-                    price: item.price || '',
-                    stock: item.stock || '',
-                    gst_percentage: item.gst_percentage || 0 // GST would need to be passed with the item object
-                });
-                // When editing, if HSN exists, GST is not editable
-                const existingGroup = groups.find(g => g.hsn_code === item.hsn);
-                setIsGstEditable(!existingGroup);
+    // Seed state when opening / editing
+    useEffect(() => {
+        if (!isOpen) return;
 
-            } else {
-                // ADD MODE
-                setFormData({
-                    name: '', hsn: '', item_code: '', batch_number: '',
-                    expiry_date: '', price: '', stock: '', gst_percentage: 0
-                });
-                setIsGstEditable(true);
-            }
+        if (item) {
+            const base = {
+                name: item.name || '',
+                hsn: item.hsn || '',
+                item_code: item.item_code || '',
+                batch_number: item.batch_number || '',
+                expiry_date: item.expiry_date || '',
+                price: item.price ?? '',
+                stock: item.stock ?? '',
+                gst_percentage: '' // will be derived from group if exists
+            };
+            setFormData(base);
+        } else {
+            setFormData({
+                name: '', hsn: '', item_code: '', batch_number: '', expiry_date: '', price: '', stock: '', gst_percentage: ''
+            });
+            setSelectedGroupHsn('');
+            setIsGstEditable(true);
         }
     }, [item, isOpen]);
 
+    // When groups or HSN change, re-evaluate selected group and GST lock
+    useEffect(() => {
+        if (!isOpen) return;
+        const match = groups.find(g => String(g.hsn_code) === String(formData.hsn));
+        if (match) {
+            setSelectedGroupHsn(match.hsn_code);
+            setFormData(prev => ({ ...prev, gst_percentage: match.gst_percentage }));
+            setIsGstEditable(false);
+        } else {
+            setSelectedGroupHsn('');
+            setIsGstEditable(true);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [groups, formData.hsn, isOpen]);
+
     const handleChange = (e) => {
         const { name, value } = e.target;
-        const newFormData = { ...formData, [name]: value };
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
 
-        if (name === 'hsn') {
-            const existingGroup = groups.find(g => g.hsn_code === value);
-            if (existingGroup) {
-                newFormData.gst_percentage = existingGroup.gst_percentage;
+    const handleGroupSelect = (e) => {
+        const hsn = e.target.value;
+        setSelectedGroupHsn(hsn);
+        if (hsn) {
+            const g = groups.find(x => String(x.hsn_code) === String(hsn));
+            if (g) {
+                setFormData(prev => ({ ...prev, hsn: g.hsn_code, gst_percentage: g.gst_percentage }));
                 setIsGstEditable(false);
-            } else {
-                setIsGstEditable(true);
             }
+        } else {
+            // No group selected (new HSN case). Do not override existing HSN field; allow user to type.
+            setIsGstEditable(true);
         }
-        setFormData(newFormData);
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        // Basic validation
         if (!formData.name || !formData.price || !formData.stock || !formData.hsn) {
-            setError('Please fill out all required fields: Name, HSN, Price, and Stock.');
+            setError('Fill required: Name, HSN, Price, Stock.');
             return;
         }
+        const payload = {
+            name: String(formData.name).trim(),
+            hsn: String(formData.hsn).trim(),
+            batch_number: formData.batch_number || '',
+            expiry_date: formData.expiry_date || '',
+            price: Number(formData.price),
+            stock: Number(formData.stock),
+            // Only include gst_percentage if editable/new HSN; DB will ignore when group exists
+            gst_percentage: formData.gst_percentage === '' ? 0 : Number(formData.gst_percentage)
+        };
         setError('');
-        onSave(formData);
+        onSave(payload);
     };
 
     if (!isOpen) return null;
@@ -109,7 +141,7 @@ const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
                                     <input type="text" name="item_code" value={formData.item_code} readOnly className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100" />
                                 </div>
                             )}
-                             <div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700">Batch No.</label>
                                 <input type="text" name="batch_number" value={formData.batch_number} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                             </div>
@@ -118,10 +150,20 @@ const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
                         {/* Column 2 */}
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">GST (%)</label>
-                                <input type="number" step="0.01" name="gst_percentage" value={formData.gst_percentage} onChange={handleChange} readOnly={!isGstEditable} className={`mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md ${!isGstEditable ? 'bg-gray-100' : ''}`} />
+                                <label className="block text-sm font-medium text-gray-700">Group (by HSN)</label>
+                                <select value={selectedGroupHsn} onChange={handleGroupSelect} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    <option value="">No group / New HSN</option>
+                                    {sortedGroups.map(g => (
+                                        <option key={g.id} value={g.hsn_code}>{`HSN: ${g.hsn_code}`}</option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-gray-500 mt-1">Selecting a group fills HSN & locks GST.</p>
                             </div>
-                             <div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">GST (%)</label>
+                                <input type="number" step="0.01" min="0" max="100" name="gst_percentage" value={formData.gst_percentage} onChange={handleChange} readOnly={!isGstEditable} className={`mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md ${!isGstEditable ? 'bg-gray-100' : ''}`} />
+                            </div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700">Expiry Date</label>
                                 <input type="date" name="expiry_date" value={formData.expiry_date} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                             </div>
@@ -153,4 +195,3 @@ const AddItemModal = ({ isOpen, onClose, onSave, item }) => {
 };
 
 export default AddItemModal;
-
