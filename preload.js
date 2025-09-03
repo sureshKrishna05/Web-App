@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateMedicine: (id, medicine) => ipcRenderer.invoke('update-medicine', id, medicine),
   deleteMedicine: (id) => ipcRenderer.invoke('delete-medicine', id),
 
+  // --- Group Functions ---
+  getAllGroups: () => ipcRenderer.invoke('get-all-groups'),
+  updateGroupGst: (data) => ipcRenderer.invoke('update-group-gst', data),
+
   // --- Invoice Functions ---
   createInvoice: (invoiceData) => ipcRenderer.invoke('create-invoice', invoiceData),
   getFilteredInvoices: (filters) => ipcRenderer.invoke('get-filtered-invoices', filters),
@@ -42,3 +46,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateInvoiceNumber: () => ipcRenderer.invoke('generate-invoice-number'),
   getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),
 });
+

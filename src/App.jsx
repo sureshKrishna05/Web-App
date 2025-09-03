@@ -10,9 +10,10 @@ import SuppliersPage from './pages/SuppliersPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import EmployeesPage from './pages/EmployeesPage';
 import ManageEmployeesPage from './pages/ManageEmployeesPage';
+import GroupsPage from './pages/GroupsPage'; // NEW: Import Groups Page
 //import PlaceholderPage from './pages/PlaceholderPage';
 
-// --- Icon Components (No change) ---
+// --- Icon Components ---
 const IconDashboard = () => <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>;
 const IconSales = () => <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>;
 const IconPurchases = () => <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>;
@@ -23,18 +24,20 @@ const IconSettings = () => <svg className="w-6 h-6 flex-shrink-0" fill="none" st
 const IconCollapse = () => <svg className="w-6 h-6 flex-shrink-0 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>;
 const IconChevronDown = () => <svg className="w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>;
 const IconLogo = () => <svg className="h-10 w-10" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="48" stroke="white" strokeWidth="4"/><path d="M30 70V30L50 50L70 30V70L50 50L30 70Z" stroke="white" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round"/></svg>;
+const IconGroups = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 14v6m-3-3h6M3 10h2a2 2 0 012 2v6a2 2 0 01-2 2H3v-10zm6 0h2a2 2 0 012 2v6a2 2 0 01-2 2H9v-10z" /></svg>;
 
-// --- Data for Navigation (No change) ---
+// --- Data for Navigation ---
 const navItems = [
     { name: 'Dashboard', icon: <IconDashboard /> },
     { name: 'Sales', icon: <IconSales />, submenu: [{ name: 'New Invoice' }, { name: 'Sales History' }] },
     { name: 'Purchases', icon: <IconPurchases />, submenu: [{ name: 'New Purchase Bill' }, { name: 'Purchase History' }] },
     { name: 'Items', icon: <IconItems /> },
+    { name: 'Groups', icon: <IconGroups /> },
     { name: 'Connections', icon: <IconParties />, submenu: [{ name: 'Clients'}, {name: 'Suppliers'}, {name: 'Employee'}]},
-    { name: 'Reports', icon: <IconReports /> },
+    { name: 'Reports', icon: <IconReports />, submenu: [{ name: 'Performance Reports'}] },
 ];
 
-// --- Sidebar Component (No change) ---
+// --- Sidebar Component ---
 const Sidebar = ({ activePage, setActivePage }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [openSubmenus, setOpenSubmenus] = useState({});
@@ -71,12 +74,11 @@ const Sidebar = ({ activePage, setActivePage }) => {
     );
 };
 
-// --- UPDATED: MainContent Component ---
+// --- MainContent Component ---
 const MainContent = ({ page, setActivePage }) => {
     const renderPage = () => {
         switch (page) {
             case 'Dashboard': return <DashboardPage setActivePage={setActivePage} />;
-            case 'Settings': return <div/>; /* Placeholder for SettingsPage */
             case 'Items': return <ItemsPage />;
             case 'New Invoice': return <BillingPage />;
             case 'Clients': return <PartiesPage />;
@@ -84,6 +86,7 @@ const MainContent = ({ page, setActivePage }) => {
             case 'Sales History': return <SalesHistoryPage/>;
             case 'Reports': return <EmployeesPage/>;
             case 'Employee': return <ManageEmployeesPage/>;
+            case 'Groups': return <GroupsPage />; // Added Groups page
             default: return <div>Page not found: {page}</div>;
         }
     };
@@ -96,7 +99,7 @@ const MainContent = ({ page, setActivePage }) => {
     );
 };
 
-// --- Main App Component (UPDATED) ---
+// --- Main App Component ---
 export default function App() {
     const [activePage, setActivePage] = useState('Dashboard');
     return (

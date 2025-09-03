@@ -118,6 +118,10 @@ function setupDatabaseHandlers() {
   });
   ipcMain.handle('delete-medicine', (event, id) => db.deleteMedicine(id));
 
+  // --- Group Handlers ---
+  ipcMain.handle('get-all-groups', () => db.getAllGroups());
+  ipcMain.handle('update-group-gst', (event, { id, gst_percentage }) => db.updateGroupGst(id, gst_percentage));
+
   // --- Invoice Handlers ---
   ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));
   ipcMain.handle('get-filtered-invoices', (event, filters) => db.getFilteredInvoices(filters));
@@ -132,13 +136,13 @@ function setupDatabaseHandlers() {
     const records = db.getInvoicesForExport(invoiceIds);
     if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
 
-    const headers = 'InvoiceNumber,Date,ClientName,SalesRep,ItemName,Quantity,FreeQuantity,UnitPrice,TotalPrice';
+    const headers = 'InvoiceNumber,Date,ClientName,SalesRep,ItemName,HSN,Quantity,FreeQuantity,UnitPrice,TotalPrice';
     const rows = records.map(r => 
-      [`"${r.invoice_number}"`, `"${new Date(r.created_at).toLocaleDateString()}"`, `"${r.client_name}"`, `"${r.rep_name || 'N/A'}"`, `"${r.medicine_name}"`, r.quantity, r.free_quantity, r.unit_price, r.total_price].join(',')
+      [`"${r.invoice_number}"`, `"${new Date(r.created_at).toLocaleDateString()}"`, `"${r.client_name}"`, `"${r.rep_name || 'N/A'}"`, `"${r.medicine_name}"`, `"${r.hsn}"`, r.quantity, r.free_quantity, r.unit_price, r.total_price].join(',')
     );
     const csvContent = [headers, ...rows].join('\n');
 
-    const { filePath } = await dialog.showSaveDialog({ title: 'Export Sales to CSV', defaultPath: `sales-export.csv`, filters: [{ name: 'CSV Files', extensions: ['csv'] }] });
+    const { filePath } = await dialog.showSaveDialog({ title: 'Export Sales to CSV', defaultPath: `sales-export-${new Date().toISOString().slice(0, 10)}.csv`, filters: [{ name: 'CSV Files', extensions: ['csv'] }] });
     if (filePath) {
       try {
         fs.writeFileSync(filePath, csvContent);
@@ -153,7 +157,7 @@ function setupDatabaseHandlers() {
     const records = db.getInvoicesForExport(invoiceIds);
     if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
     
-    const { filePath } = await dialog.showSaveDialog({ title: 'Export Sales to Excel', defaultPath: `sales-export.xlsx`, filters: [{ name: 'Excel Files', extensions: ['xlsx'] }] });
+    const { filePath } = await dialog.showSaveDialog({ title: 'Export Sales to Excel', defaultPath: `sales-export-${new Date().toISOString().slice(0, 10)}.xlsx`, filters: [{ name: 'Excel Files', extensions: ['xlsx'] }] });
     if (!filePath) return { success: false, message: 'Save cancelled.' };
 
     try {
@@ -162,8 +166,9 @@ function setupDatabaseHandlers() {
       worksheet.columns = [
         { header: 'Invoice Number', key: 'invoice_number', width: 20 }, { header: 'Date', key: 'created_at', width: 15 },
         { header: 'Client Name', key: 'client_name', width: 30 }, { header: 'Sales Rep', key: 'rep_name', width: 20 },
-        { header: 'Item Name', key: 'medicine_name', width: 30 }, { header: 'Quantity', key: 'quantity', width: 10 },
-        { header: 'Free Quantity', key: 'free_quantity', width: 15 }, { header: 'Unit Price', key: 'unit_price', width: 15, style: { numFmt: '"₹"#,##0.00' } },
+        { header: 'Item Name', key: 'medicine_name', width: 30 }, { header: 'HSN', key: 'hsn', width: 15 },
+        { header: 'Quantity', key: 'quantity', width: 10 }, { header: 'Free Quantity', key: 'free_quantity', width: 15 },
+        { header: 'Unit Price', key: 'unit_price', width: 15, style: { numFmt: '"₹"#,##0.00' } },
         { header: 'Total Price', key: 'total_price', width: 15, style: { numFmt: '"₹"#,##0.00' } }
       ];
       records.forEach(record => worksheet.addRow(record));
