@@ -58,7 +58,7 @@ const DashboardPage = ({ setActivePage }) => {
             {/* --- Top Statistics Cards --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard 
-                    title="Total Medicines" 
+                    title="Total Items" 
                     value={stats?.totalMedicines ?? 0}
                     icon={<IconMedicine />}
                     colorClass="bg-blue-100 border-l-4 border-blue-500"

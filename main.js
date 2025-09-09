@@ -118,9 +118,17 @@ function setupDatabaseHandlers() {
   });
   ipcMain.handle('delete-medicine', (event, id) => db.deleteMedicine(id));
 
-  // --- Group Handlers ---
+  // --- Group Handlers (Updated) ---
   ipcMain.handle('get-all-groups', () => db.getAllGroups());
+  ipcMain.handle('add-group', (event, group) => {
+    if (!group.hsn_code?.trim()) throw new Error('HSN Code is required');
+    if (group.gst_percentage == null) throw new Error('GST Percentage is required');
+    return db.addGroup(group);
+  });
   ipcMain.handle('update-group-gst', (event, { id, gst_percentage }) => db.updateGroupGst(id, gst_percentage));
+  ipcMain.handle('update-group-measure', (event, { id, measure }) => db.updateGroupMeasure(id, measure));
+  ipcMain.handle('delete-group', (event, id) => db.deleteGroup(id));
+
 
   // --- Invoice Handlers ---
   ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));

@@ -37,12 +37,13 @@ class DatabaseService {
             );
         `);
 
-        // --- Item Groups Table ---
+        // --- Item Groups Table (Updated with measure) ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS item_groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 hsn_code TEXT NOT NULL UNIQUE,
-                gst_percentage REAL NOT NULL DEFAULT 0
+                gst_percentage REAL NOT NULL DEFAULT 0,
+                measure TEXT
             );
         `);
 
@@ -230,14 +231,25 @@ class DatabaseService {
     getGroupByHSN(hsn) {
         return this.db.prepare('SELECT * FROM item_groups WHERE hsn_code = ?').get(hsn);
     }
-    addGroup({ hsn_code, gst_percentage = 0 }) {
-        const stmt = this.db.prepare('INSERT INTO item_groups (hsn_code, gst_percentage) VALUES (?, ?)');
-        const result = stmt.run(hsn_code, gst_percentage);
-        return { id: result.lastInsertRowid, hsn_code, gst_percentage };
+    addGroup({ hsn_code, gst_percentage = 0, measure }) {
+        const stmt = this.db.prepare('INSERT INTO item_groups (hsn_code, gst_percentage, measure) VALUES (?, ?, ?)');
+        const result = stmt.run(hsn_code, gst_percentage, measure);
+        return { id: result.lastInsertRowid, hsn_code, gst_percentage, measure };
     }
     updateGroupGst(id, gst_percentage) {
         return this.db.prepare('UPDATE item_groups SET gst_percentage = ? WHERE id = ?').run(gst_percentage, id).changes > 0;
     }
+    updateGroupMeasure(id, measure) {
+        return this.db.prepare('UPDATE item_groups SET measure = ? WHERE id = ?').run(measure, id).changes > 0;
+    }
+    deleteGroup(id) {
+        const itemsInGroup = this.db.prepare('SELECT COUNT(*) as count FROM medicines WHERE group_id = ?').get(id).count;
+        if (itemsInGroup > 0) {
+            throw new Error(`Cannot delete group. It is currently in use by ${itemsInGroup} item(s).`);
+        }
+        return this.db.prepare('DELETE FROM item_groups WHERE id = ?').run(id).changes > 0;
+    }
+
 
     // ---------------- Invoices ----------------
     createInvoice(invoiceData) {
@@ -476,3 +488,4 @@ class DatabaseService {
 }
 
 module.exports = DatabaseService;
+

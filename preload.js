@@ -31,9 +31,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateMedicine: (id, medicine) => ipcRenderer.invoke('update-medicine', id, medicine),
   deleteMedicine: (id) => ipcRenderer.invoke('delete-medicine', id),
 
-  // --- Group Functions ---
+  // --- Group Functions (Updated) ---
   getAllGroups: () => ipcRenderer.invoke('get-all-groups'),
+  addGroup: (groupData) => ipcRenderer.invoke('add-group', groupData),
   updateGroupGst: (data) => ipcRenderer.invoke('update-group-gst', data),
+  updateGroupMeasure: (data) => ipcRenderer.invoke('update-group-measure', data),
+  deleteGroup: (id) => ipcRenderer.invoke('delete-group', id),
 
   // --- Invoice Functions ---
   createInvoice: (invoiceData) => ipcRenderer.invoke('create-invoice', invoiceData),
