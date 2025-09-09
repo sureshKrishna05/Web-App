@@ -63,7 +63,7 @@ const GroupsPage = () => {
 
     return (
         <div className="p-6 bg-[#E9E9E9] h-full">
-            <h1 className="text-2xl font-bold text-gray-800 mb-4">Item Groups (HSN)</h1>
+            <h1 className="text-2xl font-bold text-gray-800 mb-4"></h1>
 
             {/* Add Group Card */}
             <div className="bg-white shadow-md rounded-lg p-4 mb-6">

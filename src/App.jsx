@@ -34,7 +34,7 @@ const navItems = [
     { name: 'Items', icon: <IconItems /> },
     { name: 'Groups', icon: <IconGroups /> },
     { name: 'Connections', icon: <IconParties />, submenu: [{ name: 'Clients'}, {name: 'Suppliers'}, {name: 'Employee'}]},
-    { name: 'Reports', icon: <IconReports />, submenu: [{ name: 'Performance Reports'}] },
+    { name: 'Reports', icon: <IconReports />},
 ];
 
 // --- Sidebar Component ---
