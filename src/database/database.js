@@ -37,7 +37,7 @@ class DatabaseService {
             );
         `);
 
-        // --- Item Groups Table (Updated with measure) ---
+        // --- Item Groups Table (Updated) ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS item_groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,7 +61,7 @@ class DatabaseService {
                 group_id INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (group_id) REFERENCES item_groups (id)
+                FOREIGN KEY (group_id) REFERENCES item_groups (id) ON DELETE SET NULL
             );
         `);
 
@@ -101,6 +101,7 @@ class DatabaseService {
                 tax REAL DEFAULT 0,
                 final_amount REAL NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                status TEXT DEFAULT 'Draft',
                 FOREIGN KEY (client_id) REFERENCES parties (id),
                 FOREIGN KEY (sales_rep_id) REFERENCES sales_reps (id) ON DELETE SET NULL
             )
@@ -121,6 +122,21 @@ class DatabaseService {
                 FOREIGN KEY (medicine_id) REFERENCES medicines (id)
             )
         `);
+        
+        // --- Schema Migrations ---
+        // Add 'status' column to invoices if it doesn't exist (for backward compatibility)
+        try {
+            const columns = this.db.prepare("PRAGMA table_info(invoices)").all();
+            const hasStatusColumn = columns.some(col => col.name === 'status');
+            if (!hasStatusColumn) {
+                this.db.exec("ALTER TABLE invoices ADD COLUMN status TEXT DEFAULT 'Draft'");
+                console.log("Applied migration: Added 'status' column to 'invoices' table.");
+            }
+        } catch (error) {
+            // This might happen if the table doesn't exist yet, which is fine on first run.
+            console.error("Could not check for 'status' column, may be initial setup:", error.message);
+        }
+
 
         this.db.exec(`CREATE INDEX IF NOT EXISTS idx_medicines_name ON medicines(name);`);
         console.log('Database tables initialized successfully');
@@ -163,6 +179,9 @@ class DatabaseService {
     // ---------------- Suppliers CRUD ----------------
     getAllSuppliers() {
         return this.db.prepare('SELECT * FROM suppliers ORDER BY name').all();
+    }
+    searchSuppliers(searchTerm) {
+        return this.db.prepare('SELECT * FROM suppliers WHERE name LIKE ? ORDER BY name').all(`%${searchTerm}%`);
     }
     addSupplier(supplier) {
         const stmt = this.db.prepare(`
@@ -224,14 +243,14 @@ class DatabaseService {
         return stmt.run(repId, month, targetAmount);
     }
 
-    // --- Group Management Functions ---
+    // --- Group Management Functions (Updated) ---
     getAllGroups() {
         return this.db.prepare('SELECT * FROM item_groups ORDER BY hsn_code').all();
     }
     getGroupByHSN(hsn) {
         return this.db.prepare('SELECT * FROM item_groups WHERE hsn_code = ?').get(hsn);
     }
-    addGroup({ hsn_code, gst_percentage = 0, measure }) {
+    addGroup({ hsn_code, gst_percentage = 0, measure = '' }) {
         const stmt = this.db.prepare('INSERT INTO item_groups (hsn_code, gst_percentage, measure) VALUES (?, ?, ?)');
         const result = stmt.run(hsn_code, gst_percentage, measure);
         return { id: result.lastInsertRowid, hsn_code, gst_percentage, measure };
@@ -243,9 +262,9 @@ class DatabaseService {
         return this.db.prepare('UPDATE item_groups SET measure = ? WHERE id = ?').run(measure, id).changes > 0;
     }
     deleteGroup(id) {
-        const itemsInGroup = this.db.prepare('SELECT COUNT(*) as count FROM medicines WHERE group_id = ?').get(id).count;
-        if (itemsInGroup > 0) {
-            throw new Error(`Cannot delete group. It is currently in use by ${itemsInGroup} item(s).`);
+        const itemCheck = this.db.prepare('SELECT COUNT(*) as count FROM medicines WHERE group_id = ?').get(id);
+        if (itemCheck.count > 0) {
+            throw new Error(`Cannot delete group. It is currently assigned to ${itemCheck.count} item(s).`);
         }
         return this.db.prepare('DELETE FROM item_groups WHERE id = ?').run(id).changes > 0;
     }
@@ -255,8 +274,9 @@ class DatabaseService {
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
             let partyId = invoice.client_id;
-            if (!partyId) {
-                let party = this.db.prepare('SELECT id FROM parties WHERE name = ?').get(invoice.client_name);
+            // Handle new client creation if a name is provided but no ID
+            if (!partyId && invoice.client_name) {
+                let party = this.getPartyByName(invoice.client_name);
                 if (!party) {
                     party = this.addParty({ name: invoice.client_name, phone: '', address: '', gstin: '' });
                 }
@@ -264,8 +284,8 @@ class DatabaseService {
             }
 
             const invoiceStmt = this.db.prepare(`
-                INSERT INTO invoices (invoice_number, client_id, sales_rep_id, total_amount, tax, final_amount)
-                VALUES (@invoice_number, @client_id, @sales_rep_id, @total_amount, @tax, @final_amount)
+                INSERT INTO invoices (invoice_number, client_id, sales_rep_id, total_amount, tax, final_amount, status)
+                VALUES (@invoice_number, @client_id, @sales_rep_id, @total_amount, @tax, @final_amount, @status)
             `);
             const invoiceResult = invoiceStmt.run({
                 ...invoice,
@@ -277,33 +297,43 @@ class DatabaseService {
                 INSERT INTO invoice_items (invoice_id, medicine_id, quantity, free_quantity, unit_price, ptr, total_price)
                 VALUES (@invoice_id, @medicine_id, @quantity, @free_quantity, @unit_price, @ptr, @total_price)
             `);
-            const stockStmt = this.db.prepare(`
-                UPDATE medicines
-                SET stock = stock - @total_deduction
-                WHERE id = @medicine_id AND stock >= @total_deduction
-            `);
-
-            for (const item of invoice.items) {
-                itemStmt.run({ invoice_id: invoiceId, ...item });
-                const total_deduction = item.quantity + (item.free_quantity || 0);
-                stockStmt.run({ total_deduction, medicine_id: item.medicine_id });
-            }
-
-            if (invoice.sales_rep_id) {
-                const month = new Date(invoice.created_at || Date.now()).toISOString().slice(0, 7);
-                const updateTargetStmt = this.db.prepare(`
-                    INSERT INTO sales_targets (rep_id, month, target_amount, achieved_amount)
-                    VALUES (@rep_id, @month, 0, @final_amount)
-                    ON CONFLICT(rep_id, month)
-                    DO UPDATE SET achieved_amount = achieved_amount + excluded.achieved_amount;
+            
+            // Only update stock and sales targets for completed invoices
+            if (invoice.status === 'Completed') {
+                const stockStmt = this.db.prepare(`
+                    UPDATE medicines
+                    SET stock = stock - @total_deduction
+                    WHERE id = @medicine_id AND stock >= @total_deduction
                 `);
-                updateTargetStmt.run({
-                    rep_id: invoice.sales_rep_id,
-                    month: month,
-                    final_amount: invoice.final_amount
-                });
-            }
+                
+                for (const item of invoice.items) {
+                    itemStmt.run({ invoice_id: invoiceId, ...item });
+                    const total_deduction = item.quantity + (item.free_quantity || 0);
+                    const stockUpdateResult = stockStmt.run({ total_deduction, medicine_id: item.medicine_id });
+                    if (stockUpdateResult.changes === 0) {
+                         throw new Error(`Insufficient stock for item: ${item.name}.`);
+                    }
+                }
 
+                if (invoice.sales_rep_id) {
+                    const month = new Date(invoice.created_at || Date.now()).toISOString().slice(0, 7);
+                    const updateTargetStmt = this.db.prepare(`
+                        INSERT INTO sales_targets (rep_id, month, target_amount, achieved_amount)
+                        VALUES (@rep_id, @month, 0, @final_amount)
+                        ON CONFLICT(rep_id, month)
+                        DO UPDATE SET achieved_amount = achieved_amount + excluded.achieved_amount;
+                    `);
+                    updateTargetStmt.run({
+                        rep_id: invoice.sales_rep_id,
+                        month: month,
+                        final_amount: invoice.final_amount
+                    });
+                }
+            } else { // If it's a draft, just save the items without updating stock/targets
+                 for (const item of invoice.items) {
+                    itemStmt.run({ invoice_id: invoiceId, ...item });
+                }
+            }
             return invoiceId;
         });
         return transaction(invoiceData);
@@ -316,6 +346,7 @@ class DatabaseService {
                 i.invoice_number, 
                 i.final_amount, 
                 i.created_at, 
+                i.status,
                 p.name as client_name 
             FROM invoices i
             LEFT JOIN parties p ON i.client_id = p.id
@@ -356,6 +387,7 @@ class DatabaseService {
                 i.invoice_number, 
                 i.final_amount, 
                 i.created_at, 
+                i.status,
                 p.name as client_name,
                 sr.name as rep_name
             FROM invoices i
@@ -369,6 +401,7 @@ class DatabaseService {
         if (filters.clientId) { whereClauses.push('i.client_id = ?'); params.push(filters.clientId); }
         if (filters.repId) { whereClauses.push('i.sales_rep_id = ?'); params.push(filters.repId); }
         if (filters.month) { whereClauses.push("strftime('%Y-%m', i.created_at) = ?"); params.push(filters.month); }
+        if (filters.status) { whereClauses.push('i.status = ?'); params.push(filters.status); }
 
         if (whereClauses.length > 0) { query += ' WHERE ' + whereClauses.join(' AND '); }
         query += ' ORDER BY i.created_at DESC';
@@ -384,6 +417,7 @@ class DatabaseService {
                 p.name as client_name,
                 sr.name as rep_name,
                 m.name as medicine_name,
+                m.hsn,
                 ii.quantity,
                 ii.free_quantity,
                 ii.unit_price,
