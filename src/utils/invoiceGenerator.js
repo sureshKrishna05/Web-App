@@ -1,0 +1,96 @@
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const { toWords } = require('number-to-words');
+
+function createInvoice(invoice, path) {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+
+    doc.pipe(fs.createWriteStream(path));
+
+    // --- Header ---
+    doc.fontSize(20).font('Helvetica-Bold').text('Matrix Life Science', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text('PLOT NO 4, FIRST FLOOR, INDIRA STREET,', { align: 'center' });
+    doc.text('SUNDAR NAGAR 5 TH CROSS, TRICHY 620021', { align: 'center' });
+    doc.moveDown(2);
+
+    // --- Invoice Info ---
+    const invoiceInfoTop = doc.y;
+    doc.fontSize(10).font('Helvetica-Bold').text('Bill To:', 50, invoiceInfoTop);
+    doc.font('Helvetica').text(invoice.client?.name || 'N/A', 50, invoiceInfoTop + 15);
+    doc.text(invoice.client?.address || '', 50, invoiceInfoTop + 30);
+    doc.text(invoice.client?.phone || '', 50, invoiceInfoTop + 45);
+    doc.text(`GSTIN: ${invoice.client?.gstin || 'N/A'}`, 50, invoiceInfoTop + 60);
+
+    doc.font('Helvetica-Bold').text('Invoice #:', 350, invoiceInfoTop);
+    doc.font('Helvetica').text(invoice.invoiceNumber, 420, invoiceInfoTop);
+    doc.font('Helvetica-Bold').text('Invoice Date:', 350, invoiceInfoTop + 15);
+    doc.font('Helvetica').text(new Date().toLocaleDateString('en-GB'), 420, invoiceInfoTop + 15);
+    doc.font('Helvetica-Bold').text('Payment Mode:', 350, invoiceInfoTop + 30);
+    doc.font('Helvetica').text(invoice.paymentMode, 420, invoiceInfoTop + 30);
+    doc.moveDown(5);
+
+    // --- Table ---
+    const tableTop = doc.y;
+    const tableHeaders = ['Medicine', 'HSN', 'Batch No', 'Qty', 'Rate', 'Amount'];
+    const colWidths = [180, 70, 70, 50, 70, 80];
+    let x = 50;
+
+    doc.font('Helvetica-Bold');
+    tableHeaders.forEach((header, i) => {
+        doc.text(header, x, tableTop, { width: colWidths[i], align: i > 2 ? 'right' : 'left' });
+        x += colWidths[i];
+    });
+    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
+
+    let y = tableTop + 20;
+    doc.font('Helvetica');
+    invoice.billItems.forEach(item => {
+        const itemAmount = (item.price * item.quantity).toFixed(2);
+        const itemData = [item.name, item.hsn, item.batch_number, item.quantity, item.price.toFixed(2), itemAmount];
+        x = 50;
+        itemData.forEach((text, i) => {
+            doc.text(text, x, y, { width: colWidths[i], align: i > 2 ? 'right' : 'left' });
+            x += colWidths[i];
+        });
+        y += 20;
+        doc.moveTo(50, y-5).lineTo(550, y-5).strokeOpacity(0.5).stroke();
+    });
+    doc.strokeOpacity(1);
+
+    // --- Totals ---
+    const totalsTop = y + 10;
+    const subtotal = invoice.totals.subtotal;
+    const tax = invoice.totals.tax; // Assuming this is total GST
+    const sgst = (tax / 2).toFixed(2);
+    const cgst = (tax / 2).toFixed(2);
+    const finalAmount = invoice.totals.finalAmount;
+
+    doc.font('Helvetica-Bold').text('Subtotal:', 350, totalsTop, { align: 'right', width: 100 });
+    doc.font('Helvetica').text(`₹${subtotal.toFixed(2)}`, 460, totalsTop, { align: 'right', width: 90 });
+
+    doc.font('Helvetica-Bold').text('SGST (2.5%):', 350, totalsTop + 15, { align: 'right', width: 100 });
+    doc.font('Helvetica').text(`₹${sgst}`, 460, totalsTop + 15, { align: 'right', width: 90 });
+
+    doc.font('Helvetica-Bold').text('CGST (2.5%):', 350, totalsTop + 30, { align: 'right', width: 100 });
+    doc.font('Helvetica').text(`₹${cgst}`, 460, totalsTop + 30, { align: 'right', width: 90 });
+    
+    doc.moveTo(350, totalsTop + 48).lineTo(550, totalsTop + 48).stroke();
+    
+    doc.font('Helvetica-Bold').fontSize(12).text('Grand Total:', 350, totalsTop + 55, { align: 'right', width: 100 });
+    doc.font('Helvetica-Bold').text(`₹${finalAmount.toFixed(2)}`, 460, totalsTop + 55, { align: 'right', width: 90 });
+
+    const amountInWords = toWords(finalAmount).replace(/\b\w/g, l => l.toUpperCase()) + ' Only';
+    doc.font('Helvetica-Bold').fontSize(9).text(`(Rupees ${amountInWords})`, 50, totalsTop + 75);
+
+
+    // --- Footer ---
+    const footerY = doc.page.height - 100;
+    doc.fontSize(8).font('Helvetica-Oblique').text('E.&.O.E', 50, footerY);
+    doc.text('SUBJECT TO TRICHY JURISDICTION ONLY', 50, footerY + 10);
+    doc.font('Helvetica-Bold').text('For Matrix Life Science', 400, footerY + 30, { align: 'right' });
+
+
+    doc.end();
+}
+
+module.exports = { createInvoice };
