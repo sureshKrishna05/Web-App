@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
 const DatabaseService = require('./src/database/database');
+const { createInvoice } = require('./src/utils/invoiceGenerator'); // Import the new generator
 
 let db;
 
@@ -29,6 +30,26 @@ function createWindow() {
 
 function setupDatabaseHandlers() {
   if (!db) return;
+
+  // --- PDF Generation Handler ---
+  ipcMain.handle('generate-invoice-pdf', async (event, invoiceData) => {
+    const { filePath } = await dialog.showSaveDialog({
+      title: 'Save Invoice PDF',
+      defaultPath: `invoice-${invoiceData.invoiceNumber}.pdf`,
+      filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+    });
+
+    if (filePath) {
+      try {
+        await createInvoice(invoiceData, filePath);
+        return { success: true, path: filePath };
+      } catch (error) {
+        console.error('Failed to create PDF:', error);
+        return { success: false, message: error.message };
+      }
+    }
+    return { success: false, message: 'Save cancelled.' };
+  });
 
   // --- NEW IPC HANDLERS for Employee Performance ---
   ipcMain.handle('get-rep-performance', (event, { repId, month }) => {

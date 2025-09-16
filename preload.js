@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getInvoiceDetails: (invoiceId) => ipcRenderer.invoke('get-invoice-details', invoiceId),
   exportInvoicesToCSV: (invoiceIds) => ipcRenderer.invoke('export-invoices-csv', invoiceIds),
   exportInvoicesToXLSX: (invoiceIds) => ipcRenderer.invoke('export-invoices-xlsx', invoiceIds),
+  generateInvoicePDF: (invoiceData) => ipcRenderer.invoke('generate-invoice-pdf', invoiceData),
 
   // --- Dashboard/Utility Functions ---
   generateInvoiceNumber: () => ipcRenderer.invoke('generate-invoice-number'),
