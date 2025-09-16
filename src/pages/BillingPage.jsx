@@ -1,64 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-
-const PrintableBill = React.forwardRef(({ billItems, client, invoiceNumber, totals, paymentMode }, ref) => {
-    // This component remains the same
-    return (
-        <div ref={ref} className="hidden print:block p-10 font-sans text-sm">
-            <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold">Matrix Life Science</h1>
-                <p>Tvs Tolgate, Trichy</p>
-            </div>
-            <div className="flex justify-between mb-4 border-b pb-2">
-                <div>
-                    <p className="font-bold">Bill To:</p>
-                    <p>{client?.name || 'N/A'}</p>
-                    <p>{client?.address || ''}</p>
-                    <p>{client?.phone || ''}</p>
-                    <p>GSTIN: {client?.gstin || 'N/A'}</p>
-                </div>
-                <div className="text-right">
-                    <p><span className="font-bold">Invoice #:</span> {invoiceNumber}</p>
-                    <p><span className="font-bold">Date:</span> {new Date().toLocaleDateString()}</p>
-                    <p><span className="font-bold">Payment Mode:</span> {paymentMode}</p>
-                </div>
-            </div>
-            <table className="min-w-full">
-                <thead>
-                    <tr className="border-b">
-                        <th className="py-2 text-left font-semibold">Medicine</th>
-                        <th className="py-2 text-left font-semibold">HSN</th>
-                        <th className="py-2 text-left font-semibold">Batch No</th>
-                        <th className="py-2 text-left font-semibold">Expiry</th>
-                        <th className="py-2 text-right font-semibold">Qty</th>
-                        <th className="py-2 text-right font-semibold">Rate</th>
-                        <th className="py-2 text-right font-semibold">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {billItems.map((item, index) => (
-                         <tr key={`${item.id}-${index}`} className="border-b">
-                            <td className="py-1">{item.name}</td>
-                            <td className="py-1">{item.hsn}</td>
-                            <td className="py-1">{item.batch_number}</td>
-                            <td className="py-1">{item.expiry_date}</td>
-                            <td className="py-1 text-right">{item.quantity}</td>
-                            <td className="py-1 text-right">₹{item.price.toFixed(2)}</td>
-                            <td className="py-1 text-right">₹{(item.price * item.quantity).toFixed(2)}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            <div className="flex justify-end mt-4">
-                <div className="w-1/3 space-y-1">
-                    <div className="flex justify-between"><span className="font-medium">Subtotal:</span><span>₹{totals.subtotal.toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span className="font-medium">Tax:</span><span>₹{totals.tax.toFixed(2)}</span></div>
-                    <div className="flex justify-between font-bold text-lg"><span >Final Total:</span><span>₹{totals.finalAmount.toFixed(2)}</span></div>
-                </div>
-            </div>
-        </div>
-    );
-});
-
+import React, { useState, useEffect, useCallback } from 'react';
 
 const BillingPage = () => {
     const [clientSuggestions, setClientSuggestions] = useState([]);
@@ -82,8 +22,6 @@ const BillingPage = () => {
     const [totals, setTotals] = useState({ subtotal: 0, tax: 0, finalAmount: 0 });
     const [paymentMode, setPaymentMode] = useState('Credit');
 
-    const printableComponentRef = useRef();
-
     useEffect(() => {
         const fetchInitialData = async () => {
             const newInvoiceNum = await window.electronAPI.generateInvoiceNumber();
@@ -93,6 +31,30 @@ const BillingPage = () => {
         };
         fetchInitialData();
     }, []);
+
+    const handleSaveNewClient = async () => {
+        if (!clientSearch.trim()) {
+            console.error("Please enter a client name before saving.");
+            return;
+        }
+
+        try {
+            const newParty = await window.electronAPI.addParty({ 
+                name: clientSearch.trim(), 
+                ...newClientDetails 
+            });
+            
+            if (newParty) {
+                // The new client is now an existing client
+                setSelectedClient(newParty);
+                setIsNewClient(false); 
+                setClientSuggestions([]); // Clear any lingering suggestions
+                console.log("New client saved successfully:", newParty);
+            }
+        } catch (error) {
+            console.error("Failed to save new client:", error);
+        }
+    };
 
     const handleClientSearch = useCallback(async (query) => {
         setClientSearch(query);
@@ -133,7 +95,8 @@ const BillingPage = () => {
             expiry_date: med.expiry_date || '',
             ptr: med.price || '',
             quantity: 1,
-            available_stock: med.stock
+            available_stock: med.stock,
+            gst_percentage: med.gst_percentage // Ensure GST is carried over
         });
         setMedicineSuggestions([]);
     };
@@ -160,24 +123,53 @@ const BillingPage = () => {
 
     useEffect(() => {
         const subtotal = billItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-        const tax = subtotal * 0.05; // 5% GST
-        const finalAmount = Math.round(subtotal + tax);
-        setTotals({ subtotal, tax, finalAmount });
+        
+        const totalTax = billItems.reduce((acc, item) => {
+            const itemTotal = item.price * item.quantity;
+            const taxForItem = itemTotal * ((item.gst_percentage || 0) / 100);
+            return acc + taxForItem;
+        }, 0);
+
+        const finalAmount = Math.round(subtotal + totalTax);
+        setTotals({ subtotal, tax: totalTax, finalAmount });
     }, [billItems]);
 
-    const handleSaveInvoice = async (status) => {
-        if (!clientSearch.trim()) { console.error("Client name is required"); return; }
-        if (billItems.length === 0) { console.error("No items in bill"); return; }
+    const resetForm = async () => {
+        setClientSearch(''); 
+        setSelectedClient(null); 
+        setBillItems([]); 
+        setPaymentMode('Credit'); 
+        setSelectedRepId('');
+        const newNum = await window.electronAPI.generateInvoiceNumber();
+        setInvoiceNumber(newNum);
+    };
 
-        let clientId = selectedClient?.id;
-        if (isNewClient) {
-            const newParty = await window.electronAPI.addParty({ name: clientSearch, ...newClientDetails });
-            clientId = newParty.id;
+    const handleSaveInvoice = async (status) => {
+        if (!clientSearch.trim()) { 
+            console.error("Client name is required."); 
+            return; 
         }
+        if (billItems.length === 0) { 
+            console.error("Cannot save an empty invoice."); 
+            return; 
+        }
+
+        if (isNewClient) {
+            console.error("Please save the new client's details before creating an invoice.");
+            return;
+        }
+
+        if (!selectedClient) {
+            console.error("Please select a client for the invoice.");
+            return;
+        }
+
+        const clientForInvoice = selectedClient;
 
         const invoiceData = {
             invoice_number: invoiceNumber,
-            client_id: clientId,
+            client_id: clientForInvoice?.id,
+            client_name: clientForInvoice?.name || clientSearch,
             sales_rep_id: selectedRepId || null,
             total_amount: totals.subtotal,
             tax: totals.tax,
@@ -186,7 +178,9 @@ const BillingPage = () => {
             status: status,
             items: billItems.map(item => ({
                 medicine_id: item.id,
+                name: item.name,
                 hsn: item.hsn,
+                batch_number: item.batch_number,
                 quantity: item.quantity,
                 free_quantity: 0,
                 unit_price: item.price,
@@ -197,25 +191,45 @@ const BillingPage = () => {
         
         try {
             await window.electronAPI.createInvoice(invoiceData);
+            
             if (status === 'Completed') {
-                handlePrint();
+                const pdfData = {
+                    invoiceNumber,
+                    paymentMode,
+                    client: clientForInvoice,
+                    billItems,
+                    totals,
+                };
+                const result = await window.electronAPI.generateInvoicePDF(pdfData);
+                if (result.success) {
+                    console.log(`PDF saved to: ${result.path}`);
+                } else {
+                    console.error(`Failed to save PDF: ${result.message}`);
+                }
+            } else if (status === 'Estimate') {
+                const quotationData = {
+                    invoiceNumber,
+                    client: clientForInvoice,
+                    billItems,
+                    totals,
+                };
+                const result = await window.electronAPI.generateQuotationPDF(quotationData);
+                if (result.success) {
+                    console.log(`Quotation PDF saved to: ${result.path}`);
+                } else {
+                    console.error(`Failed to save Quotation PDF: ${result.message}`);
+                }
             }
-            // Reset form
-            setClientSearch(''); setSelectedClient(null); setBillItems([]); setPaymentMode('Credit'); setSelectedRepId('');
-            const newNum = await window.electronAPI.generateInvoiceNumber();
-            setInvoiceNumber(newNum);
+            
+            resetForm();
         } catch (error) {
             console.error("Failed to save invoice:", error);
         }
     };
-    
-    const handlePrint = () => {
-        setTimeout(() => window.print(), 500);
-    };
 
     return (
-        <div className="p-0"> {/* Changed padding to 0 */}
-            <div className="bg-white rounded-lg p-6"> {/* Removed shadow */}
+        <div className="p-0">
+            <div className="bg-white rounded-lg p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="relative">
                         <label className="text-sm font-medium">Client</label>
@@ -232,10 +246,22 @@ const BillingPage = () => {
                 </div>
 
                 {isNewClient && (
-                     <div className="grid grid-cols-3 gap-4 mb-4 p-4 border rounded border-blue-200 bg-blue-50">
-                        <input type="text" placeholder="Phone" value={newClientDetails.phone} onChange={e => setNewClientDetails({...newClientDetails, phone: e.target.value})} className="p-2 border rounded"/>
-                        <input type="text" placeholder="GSTIN" value={newClientDetails.gstin} onChange={e => setNewClientDetails({...newClientDetails, gstin: e.target.value})} className="p-2 border rounded"/>
-                        <input type="text" placeholder="Address" value={newClientDetails.address} onChange={e => setNewClientDetails({...newClientDetails, address: e.target.value})} className="p-2 border rounded"/>
+                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 p-4 border rounded border-blue-200 bg-blue-50 items-end">
+                        <div>
+                            <label className="text-xs">Phone</label>
+                            <input type="text" placeholder="Phone" value={newClientDetails.phone} onChange={e => setNewClientDetails({...newClientDetails, phone: e.target.value})} className="p-2 border rounded w-full"/>
+                        </div>
+                        <div>
+                            <label className="text-xs">GSTIN</label>
+                            <input type="text" placeholder="GSTIN" value={newClientDetails.gstin} onChange={e => setNewClientDetails({...newClientDetails, gstin: e.target.value})} className="p-2 border rounded w-full"/>
+                        </div>
+                        <div>
+                            <label className="text-xs">Address</label>
+                            <input type="text" placeholder="Address" value={newClientDetails.address} onChange={e => setNewClientDetails({...newClientDetails, address: e.target.value})} className="p-2 border rounded w-full"/>
+                        </div>
+                        <button onClick={handleSaveNewClient} className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 h-10">
+                            Save Client
+                        </button>
                     </div>
                 )}
                 
@@ -288,16 +314,14 @@ const BillingPage = () => {
                     </div>
                 </div>
                 <div className="flex justify-end space-x-2 mt-4">
-                    <button onClick={() => handleSaveInvoice('Draft')} className="bg-gray-600 text-white px-4 py-2 rounded">Save Draft</button>
-                    <button onClick={() => handleSaveInvoice('Completed')} className="bg-blue-600 text-white px-4 py-2 rounded">Save & Print</button>
+                    <button onClick={() => handleSaveInvoice('Estimate')} className="bg-gray-600 text-white px-4 py-2 rounded">Save as Estimate</button>
+                    <button onClick={() => handleSaveInvoice('Completed')} className="bg-blue-600 text-white px-4 py-2 rounded">Save & Print Invoice</button>
                 </div>
-            </div>
-            <div className="hidden print:block">
-                <PrintableBill ref={printableComponentRef} billItems={billItems} client={selectedClient} invoiceNumber={invoiceNumber} totals={totals} paymentMode={paymentMode} />
             </div>
         </div>
     );
 };
 
 export default BillingPage;
+
 

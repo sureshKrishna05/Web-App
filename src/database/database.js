@@ -37,7 +37,7 @@ class DatabaseService {
             );
         `);
 
-        // --- Item Groups Table (Updated) ---
+        // --- Item Groups Table (Updated with measure) ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS item_groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,7 +90,7 @@ class DatabaseService {
             );
         `);
 
-        // Invoices table
+        // Invoices table - Changed Default to 'Estimate'
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,7 +101,7 @@ class DatabaseService {
                 tax REAL DEFAULT 0,
                 final_amount REAL NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'Draft',
+                status TEXT DEFAULT 'Estimate',
                 FOREIGN KEY (client_id) REFERENCES parties (id),
                 FOREIGN KEY (sales_rep_id) REFERENCES sales_reps (id) ON DELETE SET NULL
             )
@@ -129,7 +129,7 @@ class DatabaseService {
             const columns = this.db.prepare("PRAGMA table_info(invoices)").all();
             const hasStatusColumn = columns.some(col => col.name === 'status');
             if (!hasStatusColumn) {
-                this.db.exec("ALTER TABLE invoices ADD COLUMN status TEXT DEFAULT 'Draft'");
+                this.db.exec("ALTER TABLE invoices ADD COLUMN status TEXT DEFAULT 'Estimate'");
                 console.log("Applied migration: Added 'status' column to 'invoices' table.");
             }
         } catch (error) {
@@ -329,7 +329,7 @@ class DatabaseService {
                         final_amount: invoice.final_amount
                     });
                 }
-            } else { // If it's a draft, just save the items without updating stock/targets
+            } else { // If it's an estimate, just save the items without updating stock/targets
                  for (const item of invoice.items) {
                     itemStmt.run({ invoice_id: invoiceId, ...item });
                 }
@@ -435,10 +435,25 @@ class DatabaseService {
 
     // ---------------- Medicines CRUD ----------------
     getAllMedicines() {
-        return this.db.prepare('SELECT * FROM medicines ORDER BY name').all();
+        return this.db.prepare(`
+            SELECT 
+                m.*, 
+                ig.gst_percentage
+            FROM medicines m
+            LEFT JOIN item_groups ig ON m.group_id = ig.id
+            ORDER BY m.name
+        `).all();
     }
     searchMedicines(searchTerm) {
-        return this.db.prepare('SELECT * FROM medicines WHERE name LIKE ? ORDER BY name').all(`%${searchTerm}%`);
+        return this.db.prepare(`
+            SELECT 
+                m.*,
+                ig.gst_percentage
+            FROM medicines m
+            LEFT JOIN item_groups ig ON m.group_id = ig.id
+            WHERE m.name LIKE ? 
+            ORDER BY m.name
+        `).all(`%${searchTerm}%`);
     }
     addMedicine(medicine) {
         // Resolve group by HSN (create if missing when gst provided)

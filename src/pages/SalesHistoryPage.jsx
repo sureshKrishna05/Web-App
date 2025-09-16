@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ExportModal from '../components/ExportModal'; // Import the new modal
 
 const SalesHistoryPage = () => {
     const [invoices, setInvoices] = useState([]);
@@ -8,10 +9,11 @@ const SalesHistoryPage = () => {
         clientId: '',
         repId: '',
         month: '',
-        status: '' // Added status to filters
+        status: ''
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false); // State for the modal
 
     // Fetch clients and reps for filter dropdowns
     useEffect(() => {
@@ -49,33 +51,26 @@ const SalesHistoryPage = () => {
         setFilters(prev => ({ ...prev, [name]: value }));
     };
     
-    const handleExport = async () => {
-        const completedInvoices = invoices.filter(inv => inv.status === 'Completed');
-        const invoiceIds = completedInvoices.map(inv => inv.id);
+    const handleExport = async (format) => {
+        setIsExportModalOpen(false); // Close the modal first
+        const invoiceIds = invoices.map(inv => inv.id);
 
         if (invoiceIds.length === 0) {
-            console.log("No completed invoices to export.");
-            return;
-        }
-
-        // Using a simple prompt to ask for format.
-        const format = prompt("Export as 'csv' or 'xlsx'?");
-        if (!['csv', 'xlsx'].includes(format?.toLowerCase())) {
-            console.log("Export cancelled or invalid format.");
+            console.error("No invoices to export.");
             return;
         }
 
         try {
             let result;
-            if (format.toLowerCase() === 'csv') {
+            if (format === 'csv') {
                 result = await window.electronAPI.exportInvoicesToCSV(invoiceIds);
-            } else {
+            } else if (format === 'xlsx') {
                 result = await window.electronAPI.exportInvoicesToXLSX(invoiceIds);
             }
 
-            if (result.success) {
+            if (result && result.success) {
                 console.log(`Successfully exported to ${result.path}`);
-            } else {
+            } else if (result) {
                 console.error('Export failed:', result.message);
             }
         } catch (err) {
@@ -98,10 +93,11 @@ const SalesHistoryPage = () => {
                     <input type="month" name="month" value={filters.month} onChange={handleFilterChange} className="w-full p-2 border rounded"/>
                     <select name="status" value={filters.status} onChange={handleFilterChange} className="w-full p-2 border rounded">
                         <option value="">All Statuses</option>
-                        <option value="Draft">Draft</option>
+                        <option value="Estimate">Estimate</option>
                         <option value="Completed">Completed</option>
                     </select>
-                    <button onClick={handleExport} className="bg-blue-600 text-white px-4 py-2 rounded-md shadow hover:bg-blue-700">
+                    {/* The button now opens the modal */}
+                    <button onClick={() => setIsExportModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-md shadow hover:bg-blue-700">
                         Export
                     </button>
                 </div>
@@ -145,6 +141,13 @@ const SalesHistoryPage = () => {
                     </table>
                 )}
             </div>
+            
+            {/* Render the modal */}
+            <ExportModal 
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onExport={handleExport}
+            />
         </div>
     );
 };

@@ -93,4 +93,62 @@ function createInvoice(invoice, path) {
     doc.end();
 }
 
-module.exports = { createInvoice };
+function createQuotation(quotation, path) {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+
+    doc.pipe(fs.createWriteStream(path));
+
+    // --- Header ---
+    doc.fontSize(22).font('Helvetica-Bold').text('QUOTATION', { align: 'center' });
+    doc.fontSize(16).font('Helvetica').text('Matrix Life Science', { align: 'center' });
+    doc.moveDown(2);
+
+    // --- Info ---
+    const infoTop = doc.y;
+    doc.fontSize(10).font('Helvetica-Bold').text('To:', 50, infoTop);
+    doc.font('Helvetica').text(quotation.client?.name || 'N/A', 50, infoTop + 15);
+    doc.text(quotation.client?.address || '', 50, infoTop + 30);
+    doc.text(quotation.client?.phone || '', 50, infoTop + 45);
+
+    doc.font('Helvetica-Bold').text('Date:', 350, infoTop);
+    doc.font('Helvetica').text(new Date().toLocaleDateString('en-GB'), 420, infoTop);
+    doc.moveDown(5);
+
+    // --- Table ---
+    const tableTop = doc.y;
+    const tableHeaders = ['Item Description', 'Qty', 'Rate', 'Amount'];
+    const colWidths = [280, 70, 100, 100];
+    let x = 50;
+
+    doc.font('Helvetica-Bold');
+    tableHeaders.forEach((header, i) => {
+        doc.text(header, x, tableTop, { width: colWidths[i], align: i > 0 ? 'right' : 'left' });
+        x += colWidths[i];
+    });
+    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
+
+    let y = tableTop + 20;
+    doc.font('Helvetica');
+    quotation.billItems.forEach(item => {
+        const itemAmount = (item.price * item.quantity).toFixed(2);
+        const itemData = [item.name, item.quantity, item.price.toFixed(2), itemAmount];
+        x = 50;
+        itemData.forEach((text, i) => {
+            doc.text(text, x, y, { width: colWidths[i], align: i > 0 ? 'right' : 'left' });
+            x += colWidths[i];
+        });
+        y += 20;
+    });
+    doc.moveTo(50, y).lineTo(550, y).stroke();
+    
+    // --- Total ---
+    const finalAmount = quotation.totals.finalAmount;
+    doc.font('Helvetica-Bold').fontSize(12).text('Estimated Total:', 350, y + 15, { align: 'right', width: 100 });
+    doc.font('Helvetica-Bold').text(`₹${finalAmount.toFixed(2)}`, 460, y + 15, { align: 'right', width: 90 });
+
+    doc.end();
+}
+
+
+module.exports = { createInvoice, createQuotation };
+
