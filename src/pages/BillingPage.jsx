@@ -45,10 +45,9 @@ const BillingPage = () => {
             });
             
             if (newParty) {
-                // The new client is now an existing client
                 setSelectedClient(newParty);
                 setIsNewClient(false); 
-                setClientSuggestions([]); // Clear any lingering suggestions
+                setClientSuggestions([]);
                 console.log("New client saved successfully:", newParty);
             }
         } catch (error) {
@@ -96,7 +95,7 @@ const BillingPage = () => {
             ptr: med.price || '',
             quantity: 1,
             available_stock: med.stock,
-            gst_percentage: med.gst_percentage // Ensure GST is carried over
+            gst_percentage: med.gst_percentage
         });
         setMedicineSuggestions([]);
     };
@@ -107,7 +106,7 @@ const BillingPage = () => {
         const newItem = {
             ...selectedMedicine,
             ...itemDetails,
-            price: Number(itemDetails.ptr), // Use the editable PTR as the final price
+            price: Number(itemDetails.ptr),
             quantity: Number(itemDetails.quantity)
         };
         setBillItems(prev => [...prev, newItem]);
@@ -192,44 +191,32 @@ const BillingPage = () => {
         try {
             await window.electronAPI.createInvoice(invoiceData);
             
+            // Prepare data for printing
+            const pdfData = {
+                invoiceNumber,
+                paymentMode,
+                client: clientForInvoice,
+                billItems,
+                totals,
+            };
+
+            // Determine if it's an invoice or quotation and print
             if (status === 'Completed') {
-                const pdfData = {
-                    invoiceNumber,
-                    paymentMode,
-                    client: clientForInvoice,
-                    billItems,
-                    totals,
-                };
-                const result = await window.electronAPI.generateInvoicePDF(pdfData);
-                if (result.success) {
-                    console.log(`PDF saved to: ${result.path}`);
-                } else {
-                    console.error(`Failed to save PDF: ${result.message}`);
-                }
+                await window.electronAPI.printPDF(pdfData, 'invoice');
             } else if (status === 'Estimate') {
-                const quotationData = {
-                    invoiceNumber,
-                    client: clientForInvoice,
-                    billItems,
-                    totals,
-                };
-                const result = await window.electronAPI.generateQuotationPDF(quotationData);
-                if (result.success) {
-                    console.log(`Quotation PDF saved to: ${result.path}`);
-                } else {
-                    console.error(`Failed to save Quotation PDF: ${result.message}`);
-                }
+                await window.electronAPI.printPDF(pdfData, 'quotation');
             }
             
             resetForm();
         } catch (error) {
-            console.error("Failed to save invoice:", error);
+            console.error("Failed to save or print invoice:", error);
         }
     };
 
     return (
         <div className="p-0">
             <div className="bg-white rounded-lg p-6">
+                {/* Client and Invoice Details Form */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="relative">
                         <label className="text-sm font-medium">Client</label>
@@ -245,6 +232,7 @@ const BillingPage = () => {
                     <div><label className="text-sm font-medium">Invoice Date</label><input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className="w-full p-2 border rounded"/></div>
                 </div>
 
+                {/* New Client Form */}
                 {isNewClient && (
                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 p-4 border rounded border-blue-200 bg-blue-50 items-end">
                         <div>
@@ -265,6 +253,7 @@ const BillingPage = () => {
                     </div>
                 )}
                 
+                {/* Item Entry Form */}
                 <div className="grid grid-cols-9 gap-2 items-end p-2 border-t mt-4">
                     <div className="col-span-2 relative"><label className="text-xs">Select Medicine</label><input type="text" value={medicineSearch} onChange={e => handleMedicineSearch(e.target.value)} className="w-full p-2 border rounded"/>
                         {medicineSuggestions.length > 0 && (
@@ -282,6 +271,7 @@ const BillingPage = () => {
                     <div><button onClick={handleAddItem} className="w-full bg-green-500 text-white p-2 rounded">Add</button></div>
                 </div>
 
+                {/* Bill Items Table */}
                 <table className="w-full mt-4 text-sm">
                     <thead><tr className="border-b"><th className="p-1 text-left">MEDICINE</th><th className="p-1 text-left">HSN</th><th className="p-1 text-left">BATCH NO</th><th className="p-1 text-right">QTY</th><th className="p-1 text-right">RATE</th><th className="p-1 text-right">AMOUNT</th><th className="p-1"></th></tr></thead>
                     <tbody>
@@ -291,6 +281,7 @@ const BillingPage = () => {
                     </tbody>
                 </table>
 
+                {/* Footer and Totals */}
                 <div className="flex justify-between items-end mt-4 pt-4 border-t">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -314,7 +305,7 @@ const BillingPage = () => {
                     </div>
                 </div>
                 <div className="flex justify-end space-x-2 mt-4">
-                    <button onClick={() => handleSaveInvoice('Estimate')} className="bg-gray-600 text-white px-4 py-2 rounded">Save as Estimate</button>
+                    <button onClick={() => handleSaveInvoice('Estimate')} className="bg-gray-600 text-white px-4 py-2 rounded">Save & Print Estimate</button>
                     <button onClick={() => handleSaveInvoice('Completed')} className="bg-blue-600 text-white px-4 py-2 rounded">Save & Print Invoice</button>
                 </div>
             </div>
@@ -323,5 +314,4 @@ const BillingPage = () => {
 };
 
 export default BillingPage;
-
 

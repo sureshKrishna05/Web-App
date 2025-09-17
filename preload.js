@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // --- Party/Client Functions ---
   getAllParties: () => ipcRenderer.invoke('get-all-parties'),
+  getPartyById: (id) => ipcRenderer.invoke('get-party-by-id', id),
   addParty: (party) => ipcRenderer.invoke('add-party', party),
   updateParty: (id, party) => ipcRenderer.invoke('update-party', id, party),
   deleteParty: (id) => ipcRenderer.invoke('delete-party', id),
@@ -33,18 +34,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // --- Group Functions (Updated) ---
   getAllGroups: () => ipcRenderer.invoke('get-all-groups'),
+  getGroupDetails: (id) => ipcRenderer.invoke('get-group-details', id),
   addGroup: (groupData) => ipcRenderer.invoke('add-group', groupData),
   updateGroupGst: (data) => ipcRenderer.invoke('update-group-gst', data),
-  updateGroupMeasure: (data) => ipcRenderer.invoke('update-group-measure', data),
   deleteGroup: (id) => ipcRenderer.invoke('delete-group', id),
 
-  // --- Invoice Functions ---
+  // --- Invoice & PDF Functions ---
   createInvoice: (invoiceData) => ipcRenderer.invoke('create-invoice', invoiceData),
   getFilteredInvoices: (filters) => ipcRenderer.invoke('get-filtered-invoices', filters),
   getInvoiceDetails: (invoiceId) => ipcRenderer.invoke('get-invoice-details', invoiceId),
+  printPDF: (pdfData, type) => ipcRenderer.invoke('print-pdf', pdfData, type),
+  downloadInvoicePDF: (invoiceId) => ipcRenderer.invoke('download-invoice-pdf', invoiceId),
+
+  // --- Export Handlers ---
   exportInvoicesToCSV: (invoiceIds) => ipcRenderer.invoke('export-invoices-csv', invoiceIds),
   exportInvoicesToXLSX: (invoiceIds) => ipcRenderer.invoke('export-invoices-xlsx', invoiceIds),
-  generateInvoicePDF: (invoiceData) => ipcRenderer.invoke('generate-invoice-pdf', invoiceData),
 
   // --- Dashboard/Utility Functions ---
   generateInvoiceNumber: () => ipcRenderer.invoke('generate-invoice-number'),

@@ -1,13 +1,14 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os'); // Needed for temporary directory
 const ExcelJS = require('exceljs');
 const DatabaseService = require('./src/database/database');
-const { createInvoice } = require('./src/utils/invoiceGenerator'); // Import the new generator
+const { createInvoice, createQuotation } = require('./src/utils/invoiceGenerator');
 
 let db;
 
-const isDev = !app.isPackaged; // true if running `npm run dev`
+const isDev = !app.isPackaged;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -20,38 +21,96 @@ function createWindow() {
     },
   });
 
+  // Create a hidden window for printing
+  const printWin = new BrowserWindow({ show: false });
+
   if (isDev) {
     win.loadURL('http://localhost:5173');
     win.webContents.openDevTools();
   } else {
     win.loadFile(path.join(__dirname, 'dist/index.html'));
   }
+  return { win, printWin };
 }
+
+let mainWindow;
+let printWindow;
 
 function setupDatabaseHandlers() {
   if (!db) return;
 
-  // --- PDF Generation Handler ---
-  ipcMain.handle('generate-invoice-pdf', async (event, invoiceData) => {
-    const { filePath } = await dialog.showSaveDialog({
-      title: 'Save Invoice PDF',
-      defaultPath: `invoice-${invoiceData.invoiceNumber}.pdf`,
-      filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
-    });
-
-    if (filePath) {
-      try {
-        await createInvoice(invoiceData, filePath);
-        return { success: true, path: filePath };
-      } catch (error) {
-        console.error('Failed to create PDF:', error);
-        return { success: false, message: error.message };
+  // --- PDF Printing Handler ---
+  ipcMain.handle('print-pdf', async (event, pdfData, type = 'invoice') => {
+    const tempDir = os.tmpdir();
+    const tempFilePath = path.join(tempDir, `print-${Date.now()}.pdf`);
+    
+    try {
+      if (type === 'invoice') {
+        await createInvoice(pdfData, tempFilePath);
+      } else {
+        await createQuotation(pdfData, tempFilePath);
       }
+      
+      printWindow.loadFile(tempFilePath);
+      
+      printWindow.webContents.on('did-finish-load', () => {
+        printWindow.webContents.print({ silent: false, printBackground: true }, (success, reason) => {
+          if (!success) console.error('Failed to print:', reason);
+          // Clean up the temporary file
+          fs.unlink(tempFilePath, (err) => {
+            if (err) console.error('Failed to delete temp PDF:', err);
+          });
+        });
+      });
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to create or print PDF:', error);
+      return { success: false, message: error.message };
     }
-    return { success: false, message: 'Save cancelled.' };
+  });
+  
+  // --- PDF Downloading Handler (from Sales History) ---
+  ipcMain.handle('download-invoice-pdf', async (event, invoiceId) => {
+    try {
+        const invoiceDetails = db.getInvoiceDetails(invoiceId);
+        if (!invoiceDetails) {
+            return { success: false, message: 'Invoice not found.' };
+        }
+
+        const clientDetails = db.getPartyById(invoiceDetails.client_id);
+
+        const pdfData = {
+            invoiceNumber: invoiceDetails.invoice_number,
+            paymentMode: invoiceDetails.payment_mode || 'N/A',
+            client: clientDetails,
+            billItems: invoiceDetails.items.map(item => ({...item, name: item.medicine_name, price: item.unit_price})),
+            totals: {
+                subtotal: invoiceDetails.total_amount,
+                tax: invoiceDetails.tax,
+                finalAmount: invoiceDetails.final_amount
+            }
+        };
+
+        const { filePath } = await dialog.showSaveDialog({
+            title: 'Download Invoice PDF',
+            defaultPath: `invoice-${pdfData.invoiceNumber}.pdf`,
+            filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+        });
+
+        if (filePath) {
+            await createInvoice(pdfData, filePath);
+            return { success: true, path: filePath };
+        }
+        return { success: false, message: 'Save cancelled.' };
+
+    } catch (error) {
+        console.error('Failed to download PDF:', error);
+        return { success: false, message: error.message };
+    }
   });
 
-  // --- NEW IPC HANDLERS for Employee Performance ---
+
+  // --- Employee Performance ---
   ipcMain.handle('get-rep-performance', (event, { repId, month }) => {
     if (!repId) throw new Error('Sales Rep ID is required');
     if (!month) throw new Error('Month is required');
@@ -69,17 +128,11 @@ function setupDatabaseHandlers() {
   ipcMain.handle('get-all-suppliers', () => db.getAllSuppliers());
   ipcMain.handle('add-supplier', (event, supplier) => {
     if (!supplier.name?.trim()) throw new Error('Supplier name is required');
-    if (!supplier.phone?.trim()) throw new Error('Supplier contact number is required');
-    if (!supplier.address?.trim()) throw new Error('Supplier address is required');
-    if (!supplier.gstin?.trim()) throw new Error('Supplier GSTIN is required');
     return db.addSupplier(supplier);
   });
   ipcMain.handle('update-supplier', (event, id, supplier) => {
     if (!id) throw new Error('Supplier ID is required for update');
     if (!supplier.name?.trim()) throw new Error('Supplier name is required');
-    if (!supplier.phone?.trim()) throw new Error('Supplier contact number is required');
-    if (!supplier.address?.trim()) throw new Error('Supplier address is required');
-    if (!supplier.gstin?.trim()) throw new Error('Supplier GSTIN is required');
     return db.updateSupplier(id, supplier);
   });
   ipcMain.handle('delete-supplier', (event, id) => {
@@ -89,19 +142,14 @@ function setupDatabaseHandlers() {
 
   // --- Parties Handlers ---
   ipcMain.handle('get-all-parties', () => db.getAllParties());
+  ipcMain.handle('get-party-by-id', (event, id) => db.getPartyById(id));
   ipcMain.handle('add-party', (event, party) => {
     if (!party.name?.trim()) throw new Error('Party name is required');
-    if (!party.phone?.trim()) throw new Error('Party contact number is required');
-    if (!party.address?.trim()) throw new Error('Party address is required');
-    if (!party.gstin?.trim()) throw new Error('GSTIN is required');
     return db.addParty(party);
   });
   ipcMain.handle('update-party', (event, id, party) => {
     if (!id) throw new Error('Party ID is required for update');
     if (!party.name?.trim()) throw new Error('Party name is required');
-    if (!party.phone?.trim()) throw new Error('Party contact number is required');
-    if (!party.address?.trim()) throw new Error('Party address is required');
-    if (!party.gstin?.trim()) throw new Error('GSTIN is required');
     return db.updateParty(id, party);
   });
   ipcMain.handle('delete-party', (event, id) => {
@@ -110,13 +158,6 @@ function setupDatabaseHandlers() {
   });
   ipcMain.handle('search-parties', (event, searchTerm) => db.searchParties(searchTerm));
   ipcMain.handle('get-party-by-name', (event, name) => db.getPartyByName(name));
-
-  // --- Clients Handlers ---
-  ipcMain.handle('get-all-clients', () => db.getAllClients());
-  ipcMain.handle('add-client', (event, name) => {
-    if (!name?.trim()) throw new Error('Client name is required');
-    return db.addClient(name);
-  });
 
   // --- Sales Reps ---
   ipcMain.handle('get-all-sales-reps', () => db.getAllSalesReps());
@@ -141,13 +182,13 @@ function setupDatabaseHandlers() {
 
   // --- Group Handlers (Updated) ---
   ipcMain.handle('get-all-groups', () => db.getAllGroups());
+  ipcMain.handle('get-group-details', (event, id) => db.getGroupDetails(id));
   ipcMain.handle('add-group', (event, group) => {
     if (!group.hsn_code?.trim()) throw new Error('HSN Code is required');
     if (group.gst_percentage == null) throw new Error('GST Percentage is required');
     return db.addGroup(group);
   });
   ipcMain.handle('update-group-gst', (event, { id, gst_percentage }) => db.updateGroupGst(id, gst_percentage));
-  ipcMain.handle('update-group-measure', (event, { id, measure }) => db.updateGroupMeasure(id, measure));
   ipcMain.handle('delete-group', (event, id) => db.deleteGroup(id));
 
 
@@ -214,10 +255,17 @@ function setupDatabaseHandlers() {
 
 app.whenReady().then(() => {
   db = new DatabaseService();
+  const { win, printWin } = createWindow();
+  mainWindow = win;
+  printWindow = printWin;
   setupDatabaseHandlers();
-  createWindow();
+  
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+        const { win, printWin } = createWindow();
+        mainWindow = win;
+        printWindow = printWin;
+    }
   });
 });
 

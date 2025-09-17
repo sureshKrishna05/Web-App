@@ -37,13 +37,12 @@ class DatabaseService {
             );
         `);
 
-        // --- Item Groups Table (Updated with measure) ---
+        // --- Item Groups Table (Measure column removed) ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS item_groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 hsn_code TEXT NOT NULL UNIQUE,
-                gst_percentage REAL NOT NULL DEFAULT 0,
-                measure TEXT
+                gst_percentage REAL NOT NULL DEFAULT 0
             );
         `);
 
@@ -90,7 +89,7 @@ class DatabaseService {
             );
         `);
 
-        // Invoices table - Changed Default to 'Estimate'
+        // Invoices table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,17 +123,27 @@ class DatabaseService {
         `);
         
         // --- Schema Migrations ---
-        // Add 'status' column to invoices if it doesn't exist (for backward compatibility)
         try {
             const columns = this.db.prepare("PRAGMA table_info(invoices)").all();
-            const hasStatusColumn = columns.some(col => col.name === 'status');
-            if (!hasStatusColumn) {
+            if (!columns.some(col => col.name === 'status')) {
                 this.db.exec("ALTER TABLE invoices ADD COLUMN status TEXT DEFAULT 'Estimate'");
                 console.log("Applied migration: Added 'status' column to 'invoices' table.");
             }
         } catch (error) {
-            // This might happen if the table doesn't exist yet, which is fine on first run.
             console.error("Could not check for 'status' column, may be initial setup:", error.message);
+        }
+         try {
+            const columns = this.db.prepare("PRAGMA table_info(item_groups)").all();
+            if (columns.some(col => col.name === 'measure')) {
+                // This is a simple migration. For complex scenarios, a more robust migration system is needed.
+                this.db.exec("CREATE TABLE item_groups_new (id INTEGER PRIMARY KEY AUTOINCREMENT, hsn_code TEXT NOT NULL UNIQUE, gst_percentage REAL NOT NULL DEFAULT 0);");
+                this.db.exec("INSERT INTO item_groups_new (id, hsn_code, gst_percentage) SELECT id, hsn_code, gst_percentage FROM item_groups;");
+                this.db.exec("DROP TABLE item_groups;");
+                this.db.exec("ALTER TABLE item_groups_new RENAME TO item_groups;");
+                console.log("Applied migration: Removed 'measure' column from 'item_groups' table.");
+            }
+        } catch (error) {
+            console.error("Could not migrate 'item_groups' table:", error.message);
         }
 
 
@@ -145,6 +154,9 @@ class DatabaseService {
     // ---------------- Parties (Customers) CRUD ----------------
     getAllParties() {
         return this.db.prepare('SELECT * FROM parties ORDER BY name').all();
+    }
+    getPartyById(id) {
+        return this.db.prepare('SELECT * FROM parties WHERE id = ?').get(id);
     }
     getPartyByName(name) {
         return this.db.prepare('SELECT * FROM parties WHERE name = ?').get(name);
@@ -245,22 +257,40 @@ class DatabaseService {
 
     // --- Group Management Functions (Updated) ---
     getAllGroups() {
-        return this.db.prepare('SELECT * FROM item_groups ORDER BY hsn_code').all();
+        // Now includes a count of items in each group
+        return this.db.prepare(`
+            SELECT 
+                ig.id, 
+                ig.hsn_code, 
+                ig.gst_percentage,
+                COUNT(m.id) as itemCount
+            FROM item_groups ig
+            LEFT JOIN medicines m ON ig.id = m.group_id
+            GROUP BY ig.id
+            ORDER BY ig.hsn_code
+        `).all();
     }
+    
+    getGroupDetails(id) {
+        const group = this.db.prepare('SELECT * FROM item_groups WHERE id = ?').get(id);
+        if (group) {
+            group.medicines = this.db.prepare('SELECT id, name FROM medicines WHERE group_id = ? ORDER BY name').all(id);
+        }
+        return group;
+    }
+
     getGroupByHSN(hsn) {
         return this.db.prepare('SELECT * FROM item_groups WHERE hsn_code = ?').get(hsn);
     }
-    addGroup({ hsn_code, gst_percentage = 0, measure = '' }) {
-        const stmt = this.db.prepare('INSERT INTO item_groups (hsn_code, gst_percentage, measure) VALUES (?, ?, ?)');
-        const result = stmt.run(hsn_code, gst_percentage, measure);
-        return { id: result.lastInsertRowid, hsn_code, gst_percentage, measure };
+    addGroup({ hsn_code, gst_percentage = 0 }) {
+        const stmt = this.db.prepare('INSERT INTO item_groups (hsn_code, gst_percentage) VALUES (?, ?)');
+        const result = stmt.run(hsn_code, gst_percentage);
+        return { id: result.lastInsertRowid, hsn_code, gst_percentage };
     }
     updateGroupGst(id, gst_percentage) {
         return this.db.prepare('UPDATE item_groups SET gst_percentage = ? WHERE id = ?').run(gst_percentage, id).changes > 0;
     }
-    updateGroupMeasure(id, measure) {
-        return this.db.prepare('UPDATE item_groups SET measure = ? WHERE id = ?').run(measure, id).changes > 0;
-    }
+
     deleteGroup(id) {
         const itemCheck = this.db.prepare('SELECT COUNT(*) as count FROM medicines WHERE group_id = ?').get(id);
         if (itemCheck.count > 0) {

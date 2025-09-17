@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import ExportModal from '../components/ExportModal'; // Import the new modal
+import ExportModal from '../components/ExportModal'; // We will keep this for bulk exports
 
 const SalesHistoryPage = () => {
     const [invoices, setInvoices] = useState([]);
@@ -13,7 +13,7 @@ const SalesHistoryPage = () => {
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [isExportModalOpen, setIsExportModalOpen] = useState(false); // State for the modal
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
     // Fetch clients and reps for filter dropdowns
     useEffect(() => {
@@ -51,8 +51,9 @@ const SalesHistoryPage = () => {
         setFilters(prev => ({ ...prev, [name]: value }));
     };
     
+    // Handler for the main "Export" button (CSV/XLSX)
     const handleExport = async (format) => {
-        setIsExportModalOpen(false); // Close the modal first
+        setIsExportModalOpen(false);
         const invoiceIds = invoices.map(inv => inv.id);
 
         if (invoiceIds.length === 0) {
@@ -78,6 +79,20 @@ const SalesHistoryPage = () => {
         }
     };
 
+    // Handler for the individual "Download" button (PDF)
+    const handleDownload = async (invoiceId) => {
+        try {
+            const result = await window.electronAPI.downloadInvoicePDF(invoiceId);
+            if (result.success) {
+                console.log(`Invoice PDF saved to: ${result.path}`);
+            } else {
+                console.error('Failed to download invoice:', result.message);
+            }
+        } catch (err) {
+            console.error('An error occurred during download:', err);
+        }
+    };
+
     return (
         <div className="p-6 bg-[#E9E9E9] h-full">
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
@@ -96,9 +111,8 @@ const SalesHistoryPage = () => {
                         <option value="Estimate">Estimate</option>
                         <option value="Completed">Completed</option>
                     </select>
-                    {/* The button now opens the modal */}
-                    <button onClick={() => setIsExportModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-md shadow hover:bg-blue-700">
-                        Export
+                    <button onClick={() => setIsExportModalOpen(true)} className="bg-gray-700 text-white px-4 py-2 rounded-md shadow hover:bg-gray-800">
+                        Export List
                     </button>
                 </div>
             </div>
@@ -118,6 +132,7 @@ const SalesHistoryPage = () => {
                                 <th className="text-left p-3 font-semibold">Date</th>
                                 <th className="text-left p-3 font-semibold">Status</th>
                                 <th className="text-right p-3 font-semibold">Amount</th>
+                                <th className="text-center p-3 font-semibold">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -135,6 +150,14 @@ const SalesHistoryPage = () => {
                                         </span>
                                     </td>
                                     <td className="p-3 text-right">₹{invoice.final_amount.toFixed(2)}</td>
+                                    <td className="p-3 text-center">
+                                        <button 
+                                            onClick={() => handleDownload(invoice.id)} 
+                                            className="bg-blue-600 text-white text-xs px-3 py-1 rounded-md shadow hover:bg-blue-700"
+                                        >
+                                            Download PDF
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -142,7 +165,6 @@ const SalesHistoryPage = () => {
                 )}
             </div>
             
-            {/* Render the modal */}
             <ExportModal 
                 isOpen={isExportModalOpen}
                 onClose={() => setIsExportModalOpen(false)}
