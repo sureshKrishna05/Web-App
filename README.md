@@ -60,14 +60,6 @@ Build outputs will be available under `dist/`.
 
 ---
 
-## 🖥️ Screenshots  
-
-| Dashboard | Billing Page | Item Groups |  
-|-----------|--------------|-------------|  
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Billing](docs/screenshots/billing.png) | ![Groups](docs/screenshots/groups.png) |  
-
----
-
 ## 📂 Project Structure  
 
 ```
