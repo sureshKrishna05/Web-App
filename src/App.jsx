@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 // --- Import the real page components ---
 import DashboardPage from './pages/DashboardPage';
-//import SettingsPage from './pages/SettingsPage';
+import SettingsPage from './pages/SettingsPage'; // Import the new SettingsPage
 import ItemsPage from './pages/ItemsPage';
 import BillingPage from './pages/BillingPage';
 import PartiesPage from './pages/PartiesPage';
@@ -10,7 +10,7 @@ import SuppliersPage from './pages/SuppliersPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import EmployeesPage from './pages/EmployeesPage';
 import ManageEmployeesPage from './pages/ManageEmployeesPage';
-import GroupsPage from './pages/GroupsPage'; // NEW: Import Groups Page
+import GroupsPage from './pages/GroupsPage';
 //import PlaceholderPage from './pages/PlaceholderPage';
 
 // --- Icon Components ---
@@ -86,7 +86,8 @@ const MainContent = ({ page, setActivePage }) => {
             case 'Sales History': return <SalesHistoryPage/>;
             case 'Reports': return <EmployeesPage/>;
             case 'Employee': return <ManageEmployeesPage/>;
-            case 'Groups': return <GroupsPage />; // Added Groups page
+            case 'Groups': return <GroupsPage />;
+            case 'Settings': return <SettingsPage />; // Add this line to render the settings page
             default: return <div>Page not found: {page}</div>;
         }
     };
