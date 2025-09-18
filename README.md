@@ -1,105 +1,107 @@
-Pharma-Billing: Desktop Billing & Inventory Management App
-Pharma-Billing is a modern, offline-first desktop application designed for pharmacies and small businesses to manage their billing, inventory, and sales operations efficiently. Built with a powerful combination of Electron and React, it offers a fast, responsive, and native desktop experience.
+# Billing & Inventory Management App  
 
-✨ Features
-This application is packed with features to streamline business operations:
+A **desktop billing and stock management system** built with **Electron + React + SQLite**, designed for small and medium businesses. The app provides easy billing, inventory tracking, GST-ready invoicing, and reporting, all in a lightweight cross-platform package.  
 
-Dashboard
-At-a-Glance Analytics: Instantly view key metrics like total items in inventory, low-stock alerts, and the total number of invoices generated.
+---
 
-Quick Navigation: Clickable stat cards take you directly to the relevant sections of the app.
+## ✨ Features  
+- 🧾 **Invoice Management**  
+  - Create, edit, and print GST-compliant invoices  
+  - Auto-generate unique invoice numbers  
 
-Recent Activity: See a list of the most recently added items.
+- 📦 **Inventory Management**  
+  - Add/edit items with HSN, batch number, expiry date, and stock tracking  
+  - Group items by **HSN Code** with common **GST %** for consistency  
 
-Billing & Invoicing
-Dynamic Invoice Creation: Easily create new invoices and estimates (quotations).
+- 👥 **Parties & Suppliers**  
+  - Manage customers and suppliers with GSTIN, phone, and address  
 
-Smart Client Search: Search for existing clients or add new ones on the fly.
+- 📊 **Reports & Dashboard**  
+  - Low stock alerts  
+  - Recent activity view  
+  - Sales representative performance tracking  
 
-Automated Tax Calculation: GST is automatically calculated for each item based on its pre-configured HSN group.
+- ⚡ **Tech Stack**  
+  - Frontend: **Electron + React + TailwindCSS**  
+  - Backend: **SQLite (better-sqlite3)** for offline-first performance  
+  - IPC communication for database access  
 
-Backend PDF Generation: Create professional, pixel-perfect PDF invoices and quotations using pdfkit for a consistent look on all platforms.
+---
 
-Direct Printing: Print invoices and estimates directly to any connected printer from the billing page.
+## 🚀 Getting Started  
 
-Sales & Reporting
-Comprehensive Sales History: View a filterable list of all past invoices and estimates.
+### Prerequisites  
+- [Node.js](https://nodejs.org/) >= 16  
+- npm or yarn  
 
-Advanced Filtering: Filter sales records by client, sales representative, date (month/year), and status (Completed/Estimate).
+### Installation  
+```bash
+# Clone the repo
+git clone https://github.com/yourusername/billing-app.git
+cd billing-app
 
-Individual Invoice Download: Download a PDF copy of any past invoice directly from the sales history page.
-
-Bulk Data Export: Export filtered sales data to CSV or Excel (XLSX) for accounting and analysis.
-
-Inventory & Product Management
-Item Management: Add, edit, and delete inventory items (medicines) with details like batch number, expiry date, price, and stock levels.
-
-HSN-Based Grouping: Organize items into groups based on their HSN code to manage GST rates centrally.
-
-Interactive Group Management: View items within a group, and update the GST percentage for all items in that group from a single, intuitive modal.
-
-Contact Management
-Clients (Parties): Maintain a detailed database of your clients.
-
-Suppliers: Keep a record of all your suppliers.
-
-Employees: Manage your sales representatives, including their personal and employment details.
-
-🚀 Tech Stack
-This project is built with a modern and robust set of technologies:
-
-Framework: Electron for building the cross-platform desktop application.
-
-Frontend: React (with Vite) for a fast and reactive user interface.
-
-Styling: Tailwind CSS for a utility-first, modern design.
-
-Database: better-sqlite3 for a fast, local, file-based SQLite database. No external database server is required.
-
-PDF Generation: PDFKit for creating professional, high-quality invoices and quotations on the backend.
-
-⚙️ Getting Started
-Follow these instructions to get a local copy up and running for development purposes.
-
-Prerequisites
-You need to have Node.js and npm installed on your machine.
-
-Installation & Setup
-Clone the repository:
-
-git clone [https://github.com/your-username/your-repo-name.git](https://github.com/your-username/your-repo-name.git)
-cd your-repo-name
-
-Install NPM packages:
-This will install all the necessary dependencies for both Electron and React.
-
+# Install dependencies
 npm install
+```
 
-Run the application in development mode:
-This command will start the Vite development server for the React UI and launch the Electron application. It supports Hot-Module Replacement (HMR) for a smooth development experience.
-
+### Development  
+Run in development mode with hot reload:  
+```bash
 npm run dev
+```
 
-(or npm start)
+### Build  
+Package the app for your platform:  
+```bash
+npm run build
+```
 
-📦 Building the Application
-To package the application into a distributable format (e.g., an .exe for Windows or a .dmg for macOS), run the following command:
+Build outputs will be available under `dist/`.  
 
-npm run make
+---
 
-This command uses electron-forge to build the application. The final, installable files will be located in the out directory.
+## 🖥️ Screenshots  
 
-Project Structure
-/
-├── main.js                 # Electron main process entry point & backend logic
-├── preload.js              # Security bridge between main and renderer processes
-├── package.json            # Project dependencies and scripts
-│
-└── src/
-    ├── App.jsx             # Main React application component with routing
-    ├── database/
-    │   └── database.js     # All SQLite database logic (schema, CRUD operations)
-    ├── utils/
-    │   └── invoiceGenerator.js # Backend PDF generation logic using PDFKit
-    ├── pages/              # React components for each main page (Billing, Dashboard, etc.)
-    └── components/         # Reusable React components (Modals, Icons, etc.)
+| Dashboard | Billing Page | Item Groups |  
+|-----------|--------------|-------------|  
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Billing](docs/screenshots/billing.png) | ![Groups](docs/screenshots/groups.png) |  
+
+---
+
+## 📂 Project Structure  
+
+```
+billing-app/
+├── main.js                # Electron entry point
+├── preload.js             # IPC bridge
+├── src/
+│   ├── components/        # React components
+│   ├── pages/             # App pages (Billing, Items, Groups, etc.)
+│   ├── database.js        # SQLite database service
+│   └── styles/            # Tailwind styles
+├── assets/                # Icons & static files
+└── docs/                  # Documentation & screenshots
+```
+
+---
+
+## 🧩 Key Modules  
+
+- **`database.js`** → Handles SQLite schema & CRUD (items, invoices, groups, parties)  
+- **`AddItemModal.jsx`** → Add or edit items, auto-fill GST & HSN groups  
+- **`GroupsPage.jsx`** → Manage item groups by HSN code  
+- **`ItemsPage.jsx`** → View/edit/delete inventory items  
+- **`InvoicesPage.jsx`** → Create & print invoices  
+
+---
+
+## 🛠️ Future Enhancements  
+- Cloud backup & sync  
+- Multi-user support with roles/permissions  
+- Advanced reporting & analytics  
+- QR code on invoices for quick validation  
+
+---
+
+## 📜 License  
+This project is licensed under the MIT License.  
