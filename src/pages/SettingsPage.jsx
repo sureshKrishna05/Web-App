@@ -105,24 +105,24 @@ const SettingsPage = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Company Name</label>
-                                <input type="text" name="company_name" value={settings.company_name} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                                <input type="text" name="company_name" value={settings.company_name || ''} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Phone Number</label>
-                                <input type="text" name="phone" value={settings.phone} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                                <input type="text" name="phone" value={settings.phone || ''} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                             </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">GSTIN / Tax ID</label>
-                            <input type="text" name="gstin" value={settings.gstin} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                            <input type="text" name="gstin" value={settings.gstin || ''} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Address</label>
-                            <textarea name="address" value={settings.address} onChange={handleInputChange} rows="3" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                            <textarea name="address" value={settings.address || ''} onChange={handleInputChange} rows="3" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Invoice Footer Text</label>
-                            <input type="text" name="footer_text" value={settings.footer_text} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., Terms & Conditions, Subject to jurisdiction..." />
+                            <input type="text" name="footer_text" value={settings.footer_text || ''} onChange={handleInputChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., Terms & Conditions, Subject to jurisdiction..." />
                         </div>
                         <div className="flex justify-end">
                             <button type="submit" className="bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700">
@@ -159,24 +159,24 @@ const SettingsPage = () => {
     };
 
     return (
-        <div className="space-y-6">
+        <div>
              <Notification 
                 message={notification.message}
                 type={notification.type}
                 onDismiss={() => setNotification({ message: '', type: '' })}
             />
             {/* Tab Navigation */}
-            <div className="bg-white p-1 rounded-lg shadow-md">
-                <nav className="flex space-x-2">
+            <div className="mb-6 border-b border-gray-200">
+                <nav className="-mb-px flex space-x-6">
                     <button 
                         onClick={() => setActiveTab('profile')}
-                        className={`py-2 px-4 font-medium text-sm rounded-md ${activeTab === 'profile' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                        className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'profile' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
                     >
                         Company Profile
                     </button>
                     <button 
                         onClick={() => setActiveTab('data')}
-                        className={`py-2 px-4 font-medium text-sm rounded-md ${activeTab === 'data' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                        className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'data' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
                     >
                         Data Management
                     </button>

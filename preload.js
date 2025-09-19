@@ -1,10 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // --- Employee Performance Functions ---
-  getRepPerformance: (data) => ipcRenderer.invoke('get-rep-performance', data),
-  setRepTarget: (data) => ipcRenderer.invoke('set-rep-target', data),
-  
+  // --- PDF & Document Functions ---
+  printPDF: (pdfData, type) => ipcRenderer.invoke('print-pdf', pdfData, type),
+  downloadInvoicePDF: (invoiceId) => ipcRenderer.invoke('download-invoice-pdf', invoiceId),
+  downloadQuotationPDF: (quotationId) => ipcRenderer.invoke('download-quotation-pdf', quotationId),
+
+  // --- Data Export Functions ---
+  exportInvoicesToCSV: (invoiceIds) => ipcRenderer.invoke('export-invoices-csv', invoiceIds),
+  exportInvoicesToXLSX: (invoiceIds) => ipcRenderer.invoke('export-invoices-xlsx', invoiceIds),
+
   // --- Supplier Functions ---
   getAllSuppliers: () => ipcRenderer.invoke('get-all-suppliers'),
   addSupplier: (supplier) => ipcRenderer.invoke('add-supplier', supplier),
@@ -20,10 +25,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchParties: (searchTerm) => ipcRenderer.invoke('search-parties', searchTerm),
   getPartyByName: (name) => ipcRenderer.invoke('get-party-by-name', name),
 
-  // --- Sales Rep Functions ---
+  // --- Sales Rep & Performance Functions ---
   getAllSalesReps: () => ipcRenderer.invoke('get-all-sales-reps'),
   addSalesRep: (employeeData) => ipcRenderer.invoke('add-sales-rep', employeeData),
   deleteSalesRep: (id) => ipcRenderer.invoke('delete-sales-rep', id),
+  getRepPerformance: (data) => ipcRenderer.invoke('get-rep-performance', data),
+  setRepTarget: (data) => ipcRenderer.invoke('set-rep-target', data),
 
   // --- Medicine/Item Functions ---
   getAllMedicines: () => ipcRenderer.invoke('get-all-medicines'),
@@ -32,26 +39,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateMedicine: (id, medicine) => ipcRenderer.invoke('update-medicine', id, medicine),
   deleteMedicine: (id) => ipcRenderer.invoke('delete-medicine', id),
 
-  // --- Group Functions (Updated) ---
+  // --- HSN/GST Group Functions ---
   getAllGroups: () => ipcRenderer.invoke('get-all-groups'),
   getGroupDetails: (id) => ipcRenderer.invoke('get-group-details', id),
   addGroup: (groupData) => ipcRenderer.invoke('add-group', groupData),
   updateGroupGst: (data) => ipcRenderer.invoke('update-group-gst', data),
   deleteGroup: (id) => ipcRenderer.invoke('delete-group', id),
 
-  // --- Invoice & PDF Functions ---
+  // --- Invoice Functions ---
   createInvoice: (invoiceData) => ipcRenderer.invoke('create-invoice', invoiceData),
   getFilteredInvoices: (filters) => ipcRenderer.invoke('get-filtered-invoices', filters),
   getInvoiceDetails: (invoiceId) => ipcRenderer.invoke('get-invoice-details', invoiceId),
-  printPDF: (pdfData, type) => ipcRenderer.invoke('print-pdf', pdfData, type),
-  downloadInvoicePDF: (invoiceId) => ipcRenderer.invoke('download-invoice-pdf', invoiceId),
-
-  // --- Export Handlers ---
-  exportInvoicesToCSV: (invoiceIds) => ipcRenderer.invoke('export-invoices-csv', invoiceIds),
-  exportInvoicesToXLSX: (invoiceIds) => ipcRenderer.invoke('export-invoices-xlsx', invoiceIds),
+  getAllInvoices: () => ipcRenderer.invoke('get-all-invoices'),
+  generateInvoiceNumber: () => ipcRenderer.invoke('generate-invoice-number'),
+  
+  // --- Settings Functions ---
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  updateSettings: (settings) => ipcRenderer.invoke('update-settings', settings),
 
   // --- Dashboard/Utility Functions ---
-  generateInvoiceNumber: () => ipcRenderer.invoke('generate-invoice-number'),
   getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),
 });
 

@@ -5,15 +5,23 @@ const { app } = require('electron');
 class DatabaseService {
     constructor() {
         const userDataPath = app.getPath('userData');
-        const dbPath = path.join(userDataPath, 'pharmacy.db');
-        this.db = new Database(dbPath);
+        this.dbPath = path.join(userDataPath, 'pharmacy.db'); // Store path for backup/restore
+        this.db = new Database(this.dbPath);
         this.db.pragma('journal_mode = WAL');
         this.db.pragma('foreign_keys = ON');
         this.initializeTables();
     }
 
+    /**
+     * Returns the absolute path to the database file.
+     * Required for the backup/restore functionality.
+     */
+    getDbPath() {
+        return this.dbPath;
+    }
+
     initializeTables() {
-        // Parties table (for customers)
+        // --- Core Entity Tables ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS parties (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,8 +32,6 @@ class DatabaseService {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
-
-        // Suppliers table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS suppliers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,8 +42,6 @@ class DatabaseService {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
-
-        // --- Item Groups Table (Measure column removed) ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS item_groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,8 +49,6 @@ class DatabaseService {
                 gst_percentage REAL NOT NULL DEFAULT 0
             );
         `);
-
-        // Medicines table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS medicines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,8 +65,6 @@ class DatabaseService {
                 FOREIGN KEY (group_id) REFERENCES item_groups (id) ON DELETE SET NULL
             );
         `);
-
-        // Sales reps
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS sales_reps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,13 +75,11 @@ class DatabaseService {
                 date_of_joining TEXT
             );
         `);
-
-        // Sales targets
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS sales_targets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rep_id INTEGER NOT NULL,
-                month TEXT NOT NULL,
+                month TEXT NOT NULL, /* YYYY-MM format */
                 target_amount REAL NOT NULL,
                 achieved_amount REAL DEFAULT 0,
                 FOREIGN KEY (rep_id) REFERENCES sales_reps (id) ON DELETE CASCADE,
@@ -89,7 +87,7 @@ class DatabaseService {
             );
         `);
 
-        // Invoices table
+        // --- Transactional Tables (Invoices & Quotations) ---
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,13 +98,11 @@ class DatabaseService {
                 tax REAL DEFAULT 0,
                 final_amount REAL NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'Estimate',
+                status TEXT DEFAULT 'Estimate', /* e.g., 'Estimate', 'Completed' */
                 FOREIGN KEY (client_id) REFERENCES parties (id),
                 FOREIGN KEY (sales_rep_id) REFERENCES sales_reps (id) ON DELETE SET NULL
             )
         `);
-
-        // Invoice items
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS invoice_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,36 +117,78 @@ class DatabaseService {
                 FOREIGN KEY (medicine_id) REFERENCES medicines (id)
             )
         `);
+        // NEW: Quotation tables mirroring invoices
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS quotations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                quotation_number TEXT UNIQUE NOT NULL,
+                client_id INTEGER,
+                sales_rep_id INTEGER,
+                total_amount REAL NOT NULL,
+                tax REAL DEFAULT 0,
+                final_amount REAL NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (client_id) REFERENCES parties (id),
+                FOREIGN KEY (sales_rep_id) REFERENCES sales_reps (id) ON DELETE SET NULL
+            );
+        `);
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS quotation_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                quotation_id INTEGER NOT NULL,
+                medicine_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL,
+                free_quantity INTEGER DEFAULT 0,
+                unit_price REAL NOT NULL,
+                ptr REAL,
+                total_price REAL NOT NULL,
+                FOREIGN KEY (quotation_id) REFERENCES quotations (id) ON DELETE CASCADE,
+                FOREIGN KEY (medicine_id) REFERENCES medicines (id)
+            );
+        `);
         
-        // --- Schema Migrations ---
-        try {
-            const columns = this.db.prepare("PRAGMA table_info(invoices)").all();
-            if (!columns.some(col => col.name === 'status')) {
-                this.db.exec("ALTER TABLE invoices ADD COLUMN status TEXT DEFAULT 'Estimate'");
-                console.log("Applied migration: Added 'status' column to 'invoices' table.");
-            }
-        } catch (error) {
-            console.error("Could not check for 'status' column, may be initial setup:", error.message);
-        }
-         try {
-            const columns = this.db.prepare("PRAGMA table_info(item_groups)").all();
-            if (columns.some(col => col.name === 'measure')) {
-                // This is a simple migration. For complex scenarios, a more robust migration system is needed.
-                this.db.exec("CREATE TABLE item_groups_new (id INTEGER PRIMARY KEY AUTOINCREMENT, hsn_code TEXT NOT NULL UNIQUE, gst_percentage REAL NOT NULL DEFAULT 0);");
-                this.db.exec("INSERT INTO item_groups_new (id, hsn_code, gst_percentage) SELECT id, hsn_code, gst_percentage FROM item_groups;");
-                this.db.exec("DROP TABLE item_groups;");
-                this.db.exec("ALTER TABLE item_groups_new RENAME TO item_groups;");
-                console.log("Applied migration: Removed 'measure' column from 'item_groups' table.");
-            }
-        } catch (error) {
-            console.error("Could not migrate 'item_groups' table:", error.message);
-        }
-
-
+        // --- Settings Table ---
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                company_name TEXT,
+                address TEXT,
+                phone TEXT,
+                gstin TEXT,
+                footer_text TEXT
+            );
+        `);
+        
         this.db.exec(`CREATE INDEX IF NOT EXISTS idx_medicines_name ON medicines(name);`);
         console.log('Database tables initialized successfully');
     }
 
+    // ---------------- Settings CRUD ----------------
+    getSettings() {
+        let settings = this.db.prepare('SELECT * FROM settings WHERE id = 1').get();
+        if (!settings) {
+            // If no settings row exists, create a default one
+            this.db.prepare('INSERT INTO settings (id) VALUES (1)').run();
+            settings = this.db.prepare('SELECT * FROM settings WHERE id = 1').get();
+        }
+        return settings;
+    }
+
+    updateSettings(settings) {
+        const stmt = this.db.prepare(`
+            INSERT INTO settings (id, company_name, address, phone, gstin, footer_text)
+            VALUES (1, @company_name, @address, @phone, @gstin, @footer_text)
+            ON CONFLICT(id) DO UPDATE SET
+                company_name = excluded.company_name,
+                address = excluded.address,
+                phone = excluded.phone,
+                gstin = excluded.gstin,
+                footer_text = excluded.footer_text;
+        `);
+        return stmt.run(settings);
+    }
+
+    // --- (The rest of your existing functions remain here) ---
     // ---------------- Parties (Customers) CRUD ----------------
     getAllParties() {
         return this.db.prepare('SELECT * FROM parties ORDER BY name').all();
@@ -191,9 +229,6 @@ class DatabaseService {
     // ---------------- Suppliers CRUD ----------------
     getAllSuppliers() {
         return this.db.prepare('SELECT * FROM suppliers ORDER BY name').all();
-    }
-    searchSuppliers(searchTerm) {
-        return this.db.prepare('SELECT * FROM suppliers WHERE name LIKE ? ORDER BY name').all(`%${searchTerm}%`);
     }
     addSupplier(supplier) {
         const stmt = this.db.prepare(`
@@ -257,7 +292,6 @@ class DatabaseService {
 
     // --- Group Management Functions (Updated) ---
     getAllGroups() {
-        // Now includes a count of items in each group
         return this.db.prepare(`
             SELECT 
                 ig.id, 
@@ -299,12 +333,10 @@ class DatabaseService {
         return this.db.prepare('DELETE FROM item_groups WHERE id = ?').run(id).changes > 0;
     }
 
-
     // ---------------- Invoices ----------------
     createInvoice(invoiceData) {
         const transaction = this.db.transaction((invoice) => {
             let partyId = invoice.client_id;
-            // Handle new client creation if a name is provided but no ID
             if (!partyId && invoice.client_name) {
                 let party = this.getPartyByName(invoice.client_name);
                 if (!party) {
@@ -328,7 +360,6 @@ class DatabaseService {
                 VALUES (@invoice_id, @medicine_id, @quantity, @free_quantity, @unit_price, @ptr, @total_price)
             `);
             
-            // Only update stock and sales targets for completed invoices
             if (invoice.status === 'Completed') {
                 const stockStmt = this.db.prepare(`
                     UPDATE medicines
@@ -341,7 +372,7 @@ class DatabaseService {
                     const total_deduction = item.quantity + (item.free_quantity || 0);
                     const stockUpdateResult = stockStmt.run({ total_deduction, medicine_id: item.medicine_id });
                     if (stockUpdateResult.changes === 0) {
-                         throw new Error(`Insufficient stock for item: ${item.name}.`);
+                        throw new Error(`Insufficient stock for item: ${item.name}.`);
                     }
                 }
 
@@ -359,7 +390,7 @@ class DatabaseService {
                         final_amount: invoice.final_amount
                     });
                 }
-            } else { // If it's an estimate, just save the items without updating stock/targets
+            } else { // For 'Estimate' status
                  for (const item of invoice.items) {
                     itemStmt.run({ invoice_id: invoiceId, ...item });
                 }
@@ -367,22 +398,6 @@ class DatabaseService {
             return invoiceId;
         });
         return transaction(invoiceData);
-    }
-
-    getAllInvoicesWithClients() {
-        const stmt = this.db.prepare(`
-            SELECT 
-                i.id, 
-                i.invoice_number, 
-                i.final_amount, 
-                i.created_at, 
-                i.status,
-                p.name as client_name 
-            FROM invoices i
-            LEFT JOIN parties p ON i.client_id = p.id
-            ORDER BY i.created_at DESC
-        `);
-        return stmt.all();
     }
 
     getInvoiceDetails(invoiceId) {
@@ -463,6 +478,37 @@ class DatabaseService {
         return this.db.prepare(query).all(invoiceIds);
     }
 
+    // ---------------- NEW: Quotations ----------------
+    /**
+     * Retrieves the details for a single quotation, including its items.
+     * @param {number} quotationId The ID of the quotation to retrieve.
+     */
+    getQuotationDetails(quotationId) {
+        const quotation = this.db.prepare(`
+            SELECT 
+                q.*, 
+                p.name as client_name,
+                p.address as client_address,
+                p.phone as client_phone
+            FROM quotations q
+            LEFT JOIN parties p ON q.client_id = p.id
+            WHERE q.id = ?
+        `).get(quotationId);
+
+        if (quotation) {
+            quotation.items = this.db.prepare(`
+                SELECT 
+                    qi.*,
+                    m.name as medicine_name
+                FROM quotation_items qi
+                JOIN medicines m ON qi.medicine_id = m.id
+                WHERE qi.quotation_id = ?
+            `).all(quotationId);
+        }
+        return quotation;
+    }
+
+
     // ---------------- Medicines CRUD ----------------
     getAllMedicines() {
         return this.db.prepare(`
@@ -486,7 +532,6 @@ class DatabaseService {
         `).all(`%${searchTerm}%`);
     }
     addMedicine(medicine) {
-        // Resolve group by HSN (create if missing when gst provided)
         let groupId = null;
         if (medicine.hsn) {
             let group = this.getGroupByHSN(medicine.hsn);
@@ -512,13 +557,12 @@ class DatabaseService {
         return { id: newItemId };
     }
     updateMedicine(id, medicine) {
-        // Re-resolve group_id when HSN changes or provided
         let groupId = null;
         if (medicine.hsn) {
             let group = this.getGroupByHSN(medicine.hsn);
             if (!group && typeof medicine.gst_percentage !== 'undefined') {
                 const res = this.db.prepare('INSERT INTO item_groups (hsn_code, gst_percentage) VALUES (?, ?)')
-                                   .run(medicine.hsn, medicine.gst_percentage || 0);
+                                      .run(medicine.hsn, medicine.gst_percentage || 0);
                 groupId = res.lastInsertRowid;
             } else if (group) {
                 groupId = group.id;
@@ -567,4 +611,3 @@ class DatabaseService {
 }
 
 module.exports = DatabaseService;
-
