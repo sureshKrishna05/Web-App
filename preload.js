@@ -57,7 +57,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   updateSettings: (settings) => ipcRenderer.invoke('update-settings', settings),
 
+  // --- Backup & Restore Functions ---
+  backupData: () => ipcRenderer.invoke('backup-data'),
+  restoreData: () => ipcRenderer.invoke('restore-data'),
+
   // --- Dashboard/Utility Functions ---
   getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),
 });
-
