@@ -2,14 +2,16 @@
   "name": "pharma-app",
   "private": true,
   "version": "1.0.0",
-  "main": "main.js",
+  "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",
     "dev": "electron-forge start",
     "build": "electron-forge make",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "postinstall": "electron-rebuild",
+    "rebuild": "electron-rebuild --force"
   },
   "dependencies": {
     "better-sqlite3": "^11.1.2",
@@ -31,6 +33,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
     "electron": "31.2.1",
+    "electron-rebuild": "^3.2.9",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.3",
     "eslint-plugin-react-hooks": "^4.6.2",
@@ -41,7 +44,9 @@
   },
   "config": {
     "forge": {
-      "packagerConfig": {},
+      "packagerConfig": {
+        "asar": true
+      },
       "rebuildConfig": {},
       "makers": [
         {
@@ -51,7 +56,8 @@
         {
           "name": "@electron-forge/maker-zip",
           "platforms": [
-            "darwin"
+            "darwin",
+            "win32"
           ]
         },
         {
@@ -70,13 +76,17 @@
             "build": [
               {
                 "entry": "main.js",
-                "config": "vite.config.js"
+                "config": "vite.main.config.js"
+              },
+              {
+                "entry": "preload.js",
+                "config": "vite.preload.config.js"
               }
             ],
             "renderer": [
               {
                 "name": "main_window",
-                "config": "vite.config.js"
+                "config": "vite.renderer.config.js"
               }
             ]
           }
