@@ -3,9 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const ExcelJS = require('exceljs');
-const DatabaseService = require('./src/database/database');
-const { createInvoice, createQuotation } = require('./src/utils/invoiceGenerator');
-
+// main.js - Corrected
+const DatabaseService = require('./src/database/database.js');
+const { createInvoice, createQuotation } = require('./src/utils/invoiceGenerator.js');
 // --- Global Variables ---
 let db;
 let mainWindow;

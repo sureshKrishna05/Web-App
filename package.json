@@ -1,7 +1,11 @@
 {
   "name": "pharma-app",
-  "private": true,
   "version": "1.0.0",
+  "description": "A billing and inventory management application.",
+  "author": {
+    "name": "SURESH KRISHNA R",
+    "email": "sureshkrishnar05@gmail.com"
+  },
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",
