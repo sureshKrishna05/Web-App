@@ -5,7 +5,7 @@ export default defineConfig({
         rollupOptions: {
           external: [
             'better-sqlite3', 
-            'exceljs',
+            'xlsx',
             'pdfkit',
             'number-to-words'
           ],

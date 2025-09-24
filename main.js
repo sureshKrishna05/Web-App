@@ -2,16 +2,14 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const ExcelJS = require('exceljs');
-// main.js - Corrected
-const DatabaseService = require('./src/database/database.js');
-const { createInvoice, createQuotation } = require('./src/utils/invoiceGenerator.js');
+const XLSX = require('xlsx'); // Changed from 'exceljs' to 'xlsx'
+const DatabaseService = require(path.join(__dirname, 'src', 'database', 'database.js'));
+const { createInvoice, createQuotation } = require(path.join(__dirname, 'src', 'utils', 'invoiceGenerator.js'));
+
 // --- Global Variables ---
 let db;
 let mainWindow;
 let printWindow; // Hidden window for silent printing
-
-const isDev = !app.isPackaged;
 
 // --- IPC Handlers Setup ---
 
@@ -30,9 +28,9 @@ function setupPdfHandlers() {
       const fullPdfData = { ...pdfData, settings };
 
       if (type === 'invoice') {
-        await createInvoice(fullPdfData, tempFilePath);
+        createInvoice(fullPdfData, tempFilePath);
       } else if (type === 'quotation') {
-        await createQuotation(fullPdfData, tempFilePath);
+        createQuotation(fullPdfData, tempFilePath);
       } else {
         throw new Error(`Invalid document type for printing: ${type}`);
       }
@@ -54,7 +52,7 @@ function setupPdfHandlers() {
     }
   });
 
-  ipcMain.handle('download-invoice-pdf', async (event, invoiceId) => {
+  ipcMain.handle('download-invoice-pdf', (event, invoiceId) => {
     try {
       const invoiceDetails = db.getInvoiceDetails(invoiceId);
       if (!invoiceDetails) return { success: false, message: 'Invoice not found.' };
@@ -77,14 +75,14 @@ function setupPdfHandlers() {
         settings
       };
 
-      const { filePath } = await dialog.showSaveDialog({
+      const { filePath } = dialog.showSaveDialogSync({
         title: 'Download Invoice PDF',
         defaultPath: `invoice-${pdfData.invoiceNumber}.pdf`,
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
       });
 
       if (filePath) {
-        await createInvoice(pdfData, filePath);
+        createInvoice(pdfData, filePath);
         return { success: true, path: filePath };
       }
       return { success: false, message: 'Save cancelled.' };
@@ -94,7 +92,7 @@ function setupPdfHandlers() {
     }
   });
   
-  ipcMain.handle('download-quotation-pdf', async (event, quotationId) => {
+  ipcMain.handle('download-quotation-pdf', (event, quotationId) => {
     try {
         const quotationDetails = db.getQuotationDetails(quotationId);
         if (!quotationDetails) return { success: false, message: 'Quotation not found.' };
@@ -116,14 +114,14 @@ function setupPdfHandlers() {
             settings
         };
 
-        const { filePath } = await dialog.showSaveDialog({
+        const { filePath } = dialog.showSaveDialogSync({
             title: 'Download Quotation PDF',
             defaultPath: `quotation-${pdfData.quotationNumber}.pdf`,
             filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
         });
 
         if (filePath) {
-            await createQuotation(pdfData, filePath);
+            createQuotation(pdfData, filePath);
             return { success: true, path: filePath };
         }
         return { success: false, message: 'Save cancelled.' };
@@ -183,6 +181,7 @@ function setupInvoiceHandlers() {
 }
 
 function setupExportHandlers() {
+    // UPDATED to use 'xlsx' library for CSV export
     ipcMain.handle('export-invoices-csv', async (event, invoiceIds) => {
         try {
             if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
@@ -192,28 +191,18 @@ function setupExportHandlers() {
             const { filePath } = await dialog.showSaveDialog({ title: 'Export to CSV', defaultPath: `sales-${Date.now()}.csv` });
             if (!filePath) return { success: false, message: 'Save cancelled.' };
 
-            const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Sales');
-            worksheet.columns = [
-                { header: 'Invoice Number', key: 'invoice_number' },
-                { header: 'Date', key: 'created_at' },
-                { header: 'Client Name', key: 'client_name' },
-                { header: 'Sales Rep', key: 'rep_name' },
-                { header: 'Item Name', key: 'medicine_name' },
-                { header: 'HSN', key: 'hsn' },
-                { header: 'Quantity', key: 'quantity' },
-                { header: 'Free Quantity', key: 'free_quantity' },
-                { header: 'Unit Price', key: 'unit_price' },
-                { header: 'Total Price', key: 'total_price' },
-            ];
-            worksheet.addRows(records);
-            await workbook.csv.writeFile(filePath);
+            const worksheet = XLSX.utils.json_to_sheet(records);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
+            XLSX.writeFile(workbook, filePath, { bookType: 'csv' }); // Specify bookType for CSV
+
             return { success: true, path: filePath };
         } catch (error) {
             return { success: false, message: error.message };
         }
     });
 
+    // UPDATED to use 'xlsx' library for XLSX export
     ipcMain.handle('export-invoices-xlsx', async (event, invoiceIds) => {
         try {
             if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
@@ -222,23 +211,12 @@ function setupExportHandlers() {
             
             const { filePath } = await dialog.showSaveDialog({ title: 'Export to Excel', defaultPath: `sales-${Date.now()}.xlsx` });
             if (!filePath) return { success: false, message: 'Save cancelled.' };
+            
+            const worksheet = XLSX.utils.json_to_sheet(records);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
+            XLSX.writeFile(workbook, filePath);
 
-            const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Sales');
-            worksheet.columns = [
-                { header: 'Invoice Number', key: 'invoice_number', width: 20 },
-                { header: 'Date', key: 'created_at', width: 15 },
-                { header: 'Client Name', key: 'client_name', width: 30 },
-                { header: 'Sales Rep', key: 'rep_name', width: 20 },
-                { header: 'Item Name', key: 'medicine_name', width: 30 },
-                { header: 'HSN', key: 'hsn', width: 15 },
-                { header: 'Quantity', key: 'quantity', width: 10 },
-                { header: 'Free Quantity', key: 'free_quantity', width: 15 },
-                { header: 'Unit Price', key: 'unit_price', width: 15, style: { numFmt: '"₹"#,##0.00' } },
-                { header: 'Total Price', key: 'total_price', width: 15, style: { numFmt: '"₹"#,##0.00' } }
-            ];
-            worksheet.addRows(records);
-            await workbook.xlsx.writeFile(filePath);
             return { success: true, path: filePath };
         } catch (error) {
             return { success: false, message: error.message };
@@ -281,13 +259,9 @@ function setupBackupRestoreHandlers() {
                 const backupPath = filePaths[0];
                 const targetPath = db.getDbPath();
 
-                // 1. Close the current database connection.
                 db.close();
-
-                // 2. Replace the database file.
                 fs.copyFileSync(backupPath, targetPath);
 
-                // 3. Show a success message and quit the app. The user will restart manually.
                 dialog.showMessageBoxSync(mainWindow, {
                     type: 'info',
                     title: 'Restore Successful',
@@ -297,7 +271,7 @@ function setupBackupRestoreHandlers() {
                 app.quit();
                 return { success: true };
             }
-            return { success: false, message: 'Restore cancelled.' };
+            return { success: false, message: 'Save cancelled.' };
         } catch (error) {
             dialog.showErrorBox('Restore Failed', `An error occurred: ${error.message}. Please restart the application.`);
             app.quit();
@@ -344,11 +318,12 @@ function createWindows() {
 
   printWindow = new BrowserWindow({ show: false });
 
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+  // Use Vite dev server URL in development
+  if (process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, `../renderer/${process.env.MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 }
 
@@ -380,3 +355,4 @@ app.on('activate', () => {
     initializeApp();
   }
 });
+
