@@ -52,6 +52,10 @@
     "forge": {
       "packagerConfig": {
         "asar": true,
+        "extraResource": [
+          "src/database/",
+          "src/utils/"
+        ],
         "ignore": [
           "^/node_modules/\\.bin($|/)",
           "^/node_modules/electron($|/)",

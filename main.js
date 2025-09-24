@@ -2,9 +2,23 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const XLSX = require('xlsx'); // Changed from 'exceljs' to 'xlsx'
-const DatabaseService = require(path.join(__dirname, 'src', 'database', 'database.js'));
-const { createInvoice, createQuotation } = require(path.join(__dirname, 'src', 'utils', 'invoiceGenerator.js'));
+const XLSX = require('xlsx');
+const isDev = !app.isPackaged;
+
+const dbPath = isDev
+  ? path.join(__dirname, 'src', 'database', 'database.js')
+  : path.join(process.resourcesPath, 'src', 'database', 'database.js');
+
+const utilsPath = isDev
+  ? path.join(__dirname, 'src', 'utils', 'invoiceGenerator.js')
+  : path.join(process.resourcesPath, 'src', 'utils', 'invoiceGenerator.js');
+
+const DatabaseService = require(dbPath);
+const { createInvoice, createQuotation } = require(utilsPath);
+// Handle creating/removing shortcuts on Windows when installing/uninstalling.
+if (require('electron-squirrel-startup')) {
+  app.quit();
+}
 
 // --- Global Variables ---
 let db;
@@ -12,10 +26,7 @@ let mainWindow;
 let printWindow; // Hidden window for silent printing
 
 // --- IPC Handlers Setup ---
-
-/**
- * Sets up IPC handlers related to PDF generation, printing, and downloading.
- */
+// ... (rest of the file is unchanged) ...
 function setupPdfHandlers() {
   if (!db) return;
 
@@ -181,20 +192,19 @@ function setupInvoiceHandlers() {
 }
 
 function setupExportHandlers() {
-    // UPDATED to use 'xlsx' library for CSV export
-    ipcMain.handle('export-invoices-csv', async (event, invoiceIds) => {
+    ipcMain.handle('export-invoices-csv', (event, invoiceIds) => {
         try {
             if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
             const records = db.getInvoicesForExport(invoiceIds);
             if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
 
-            const { filePath } = await dialog.showSaveDialog({ title: 'Export to CSV', defaultPath: `sales-${Date.now()}.csv` });
+            const { filePath } = dialog.showSaveDialogSync({ title: 'Export to CSV', defaultPath: `sales-${Date.now()}.csv` });
             if (!filePath) return { success: false, message: 'Save cancelled.' };
 
             const worksheet = XLSX.utils.json_to_sheet(records);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
-            XLSX.writeFile(workbook, filePath, { bookType: 'csv' }); // Specify bookType for CSV
+            XLSX.writeFile(workbook, filePath, { bookType: 'csv' });
 
             return { success: true, path: filePath };
         } catch (error) {
@@ -202,14 +212,13 @@ function setupExportHandlers() {
         }
     });
 
-    // UPDATED to use 'xlsx' library for XLSX export
-    ipcMain.handle('export-invoices-xlsx', async (event, invoiceIds) => {
+    ipcMain.handle('export-invoices-xlsx', (event, invoiceIds) => {
         try {
             if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
             const records = db.getInvoicesForExport(invoiceIds);
             if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
             
-            const { filePath } = await dialog.showSaveDialog({ title: 'Export to Excel', defaultPath: `sales-${Date.now()}.xlsx` });
+            const { filePath } = dialog.showSaveDialogSync({ title: 'Export to Excel', defaultPath: `sales-${Date.now()}.xlsx` });
             if (!filePath) return { success: false, message: 'Save cancelled.' };
             
             const worksheet = XLSX.utils.json_to_sheet(records);
@@ -271,7 +280,7 @@ function setupBackupRestoreHandlers() {
                 app.quit();
                 return { success: true };
             }
-            return { success: false, message: 'Save cancelled.' };
+            return { success: false, message: 'Restore cancelled.' };
         } catch (error) {
             dialog.showErrorBox('Restore Failed', `An error occurred: ${error.message}. Please restart the application.`);
             app.quit();
@@ -305,25 +314,23 @@ function initializeIpcHandlers() {
     allHandlerSetups.forEach(setup => setup());
 }
 
-function createWindows() {
+const createWindows = () => {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
     },
   });
 
   printWindow = new BrowserWindow({ show: false });
-
-  // Use Vite dev server URL in development
-  if (process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  
+  // Vite plugin injects these variables into the main process
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, `../renderer/${process.env.MAIN_WINDOW_VITE_NAME}/index.html`));
+    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 }
 
@@ -333,7 +340,7 @@ function initializeApp() {
   try {
     db = new DatabaseService();
     initializeIpcHandlers();
-    createWindows();
+    app.on('ready', createWindows);
   } catch(error) {
     console.error("Failed to initialize application:", error);
     dialog.showErrorBox("Application Error", "Could not initialize the application. Please check the logs.");
@@ -341,7 +348,8 @@ function initializeApp() {
   }
 }
 
-app.whenReady().then(initializeApp);
+initializeApp();
+
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -352,7 +360,7 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    initializeApp();
+    createWindows();
   }
 });
 
