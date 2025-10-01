@@ -60,7 +60,12 @@
       "**/node_modules/xlsx/**/*",
       "**/node_modules/pdfkit/**/*",
       "**/node_modules/number-to-words/**/*",
-      "**/node_modules/crypto-js/**/*"
+      "**/node_modules/crypto-js/**/*",
+      "**/node_modules/fontkit/**/*",
+      "**/node_modules/@swc/**/*",
+      "**/node_modules/restructure/**/*",
+      "**/node_modules/tslib/**/*",
+      "**/node_modules/deep-equal/**/*"
     ],
     "extraResources": [
       {
