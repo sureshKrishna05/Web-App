@@ -57,7 +57,10 @@
     ],
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**/*",
-      "**/node_modules/xlsx/**/*"
+      "**/node_modules/xlsx/**/*",
+      "**/node_modules/pdfkit/**/*",
+      "**/node_modules/number-to-words/**/*",
+      "**/node_modules/crypto-js/**/*"
     ],
     "extraResources": [
       {

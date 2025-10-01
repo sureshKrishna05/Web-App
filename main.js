@@ -2,9 +2,13 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const XLSX = require('xlsx');
 // The isDev check is still useful
 const isDev = !app.isPackaged;
+
+const xlsx_path = isDev
+  ? 'xlsx'
+  : path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/xlsx');
+const XLSX = require(xlsx_path);
 
 // Correctly define paths for both development and production with Electron Builder
 const dbPath = isDev
