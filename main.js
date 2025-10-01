@@ -3,15 +3,17 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const XLSX = require('xlsx');
+// The isDev check is still useful
 const isDev = !app.isPackaged;
 
+// Correctly define paths for both development and production with Electron Builder
 const dbPath = isDev
-  ? path.join(__dirname, 'src', 'database', 'database.js')
-  : path.join(process.resourcesPath, 'src', 'database', 'database.js');
+  ? path.join(__dirname, 'src/database/database.js')
+  : path.join(process.resourcesPath, 'database/database.js');
 
 const utilsPath = isDev
-  ? path.join(__dirname, 'src', 'utils', 'invoiceGenerator.js')
-  : path.join(process.resourcesPath, 'src', 'utils', 'invoiceGenerator.js');
+  ? path.join(__dirname, 'src/utils/invoiceGenerator.js')
+  : path.join(process.resourcesPath, 'utils/invoiceGenerator.js');
 
 const DatabaseService = require(dbPath);
 const { createInvoice, createQuotation } = require(utilsPath);

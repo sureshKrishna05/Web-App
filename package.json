@@ -6,16 +6,14 @@
     "name": "SURESH KRISHNA R",
     "email": "sureshkrishnar05@gmail.com"
   },
-  "main": ".vite/build/main.js",
+  "homepage": "./",
+  "main": "main.js",
   "scripts": {
-    "start": "electron-forge start",
-    "dev": "electron-forge start",
-    "build": "electron-forge make",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "postinstall": "electron-rebuild",
-    "rebuild": "electron-rebuild --force"
+    "start": "vite",
+    "build": "vite build",
+    "rebuild-sqlite": "electron-rebuild --force --only better-sqlite3",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "npm run build && electron-builder"
   },
   "dependencies": {
     "better-sqlite3": "^11.1.2",
@@ -27,18 +25,10 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^7.4.0",
-    "@electron-forge/maker-deb": "^7.4.0",
-    "@electron-forge/maker-rpm": "^7.4.0",
-    "@electron-forge/maker-squirrel": "^7.4.0",
-    "@electron-forge/maker-zip": "^7.4.0",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.4.0",
-    "@electron-forge/plugin-vite": "^7.4.0",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
     "electron": "31.2.1",
+    "electron-builder": "^24.13.3",
     "electron-rebuild": "^3.2.9",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.3",
@@ -48,71 +38,49 @@
     "tailwindcss": "^3.4.4",
     "vite": "^5.3.3"
   },
-  "config": {
-    "forge": {
-      "packagerConfig": {
-        "asar": true,
-        "extraResource": [
-          "src/database/",
-          "src/utils/"
-        ],
-        "ignore": [
-          "^/node_modules/\\.bin($|/)",
-          "^/node_modules/electron($|/)",
-          "^/node_modules/electron-prebuilt(-compile)?($|/)",
-          "^/node_modules/@electron($|/)",
-          "^/node_modules/(@(electron-forge|types)/|electron-prebuilt|electron-rebuild|electron-winstaller|electron-packager|glob|nugget)($|/)"
-        ]
+  "build": {
+    "appId": "com.company.pharma-app",
+    "productName": "PharmaApp",
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "node_modules/**/*",
+      "!**/*.map",
+      "!**/*.test.js",
+      "!**/__tests__/**",
+      "!**/*.md",
+      "!.git/**",
+      "!.github/**",
+      "!**/node_modules/.bin"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*",
+      "**/node_modules/xlsx/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "src/database",
+        "to": "database"
       },
-      "rebuildConfig": {},
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "config": {}
-        },
-        {
-          "name": "@electron-forge/maker-zip",
-          "platforms": [
-            "darwin",
-            "win32"
-          ]
-        },
-        {
-          "name": "@electron-forge/maker-deb",
-          "config": {}
-        },
-        {
-          "name": "@electron-forge/maker-rpm",
-          "config": {}
-        }
-      ],
-      "plugins": [
-        {
-          "name": "@electron-forge/plugin-auto-unpack-natives",
-          "config": {}
-        },
-        {
-          "name": "@electron-forge/plugin-vite",
-          "config": {
-            "build": [
-              {
-                "entry": "main.js",
-                "config": "vite.main.config.js"
-              },
-              {
-                "entry": "preload.js",
-                "config": "vite.preload.config.js"
-              }
-            ],
-            "renderer": [
-              {
-                "name": "main_window",
-                "config": "vite.renderer.config.js"
-              }
-            ]
-          }
-        }
+      {
+        "from": "src/utils",
+        "to": "utils"
+      }
+    ],
+    "directories": {
+      "output": "releases",
+      "buildResources": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis"
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }

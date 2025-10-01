@@ -1,10 +1,15 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// This is the standard configuration for a Vite-powered Electron Forge project.
+// https://vitejs.dev/config/
 export default defineConfig({
-  // The 'base' option is crucial for ensuring that asset paths are correct
-  // in the final production build.
-  base: './', 
+  // The 'base' option is crucial for Electron apps.
+  // It ensures that asset paths are relative in the final build.
+  base: './',
   plugins: [react()],
+  build: {
+    // This specifies the output directory for the Vite build.
+    // Electron Builder will look for your app's code here.
+    outDir: 'dist',
+  },
 });
