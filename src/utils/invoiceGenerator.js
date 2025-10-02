@@ -1,23 +1,6 @@
-const path = require('path');
-const { app } = require('electron');
+const PDFDocument = require('pdfkit');
 const fs = require('fs');
-
-const isDev = !app.isPackaged;
-
-const pdfkit_path = isDev
-  ? 'pdfkit'
-  : path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/pdfkit');
-const PDFDocument = require(pdfkit_path);
-
-const num_words_path = isDev
-  ? 'number-to-words'
-  : path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/number-to-words');
-const { toWords } = require(num_words_path);
-
-const crypto_js_path = isDev
-  ? 'crypto-js'
-  : path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/crypto-js');
-const CryptoJS = require(crypto_js_path);
+const { toWords } = require('number-to-words');
 
 function createInvoice(invoice, path) {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });

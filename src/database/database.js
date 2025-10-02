@@ -2,11 +2,7 @@
 const path = require('path');
 const { app } = require('electron');
 const isDev = !app.isPackaged;
-const better_sqlite3_path = isDev
-  ? 'better-sqlite3'
-  // Correctly points to the unpacked directory in production
-  : path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/better-sqlite3');
-const Database = require(better_sqlite3_path);
+const Database = require('better-sqlite3');
 
 class DatabaseService {
     constructor() {

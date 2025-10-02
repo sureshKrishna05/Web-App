@@ -2,25 +2,13 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-// The isDev check is still useful
-const isDev = !app.isPackaged;
+const XLSX = require('xlsx');
 
-const xlsx_path = isDev
-  ? 'xlsx'
-  : path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/xlsx');
-const XLSX = require(xlsx_path);
+// --- START: CORRECTED REQUIRE STATEMENTS ---
+const DatabaseService = require('./src/database/database.js');
+const { createInvoice, createQuotation } = require('./src/utils/invoiceGenerator.js');
+// --- END: CORRECTED REQUIRE STATEMENTS ---
 
-// Correctly define paths for both development and production with Electron Builder
-const dbPath = isDev
-  ? path.join(__dirname, 'src/database/database.js')
-  : path.join(process.resourcesPath, 'database/database.js');
-
-const utilsPath = isDev
-  ? path.join(__dirname, 'src/utils/invoiceGenerator.js')
-  : path.join(process.resourcesPath, 'utils/invoiceGenerator.js');
-
-const DatabaseService = require(dbPath);
-const { createInvoice, createQuotation } = require(utilsPath);
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();
@@ -32,7 +20,6 @@ let mainWindow;
 let printWindow; // Hidden window for silent printing
 
 // --- IPC Handlers Setup ---
-// ... (rest of the file is unchanged) ...
 function setupPdfHandlers() {
   if (!db) return;
 
@@ -320,28 +307,35 @@ function initializeIpcHandlers() {
     allHandlerSetups.forEach(setup => setup());
 }
 
+// --- START: CORRECTED createWindows FUNCTION ---
 const createWindows = () => {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      // It's a good practice to turn off contextIsolation and nodeIntegration
+      // when loading remote content, but for local development it's okay.
     },
   });
 
   printWindow = new BrowserWindow({ show: false });
   
-  // Vite plugin injects these variables into the main process
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  const isDev = !app.isPackaged;
+
+  if (isDev) {
+    // In development, load the Vite dev server URL
+    mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+    // In production, load the built index.html file
+    mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
   }
 }
+// --- END: CORRECTED createWindows FUNCTION ---
+
 
 // --- Application Lifecycle ---
-
 function initializeApp() {
   try {
     db = new DatabaseService();
@@ -356,7 +350,6 @@ function initializeApp() {
 
 initializeApp();
 
-
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     if (db) db.close();
@@ -369,4 +362,3 @@ app.on('activate', () => {
     createWindows();
   }
 });
-
