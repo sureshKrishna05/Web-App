@@ -402,13 +402,14 @@ class DatabaseService {
         return transaction(invoiceData);
     }
 
-    getInvoiceDetails(invoiceId) {
+getInvoiceDetails(invoiceId) {
         const invoice = this.db.prepare(`
             SELECT 
                 i.*, 
                 p.name as client_name,
                 p.address as client_address,
-                p.phone as client_phone
+                p.phone as client_phone,
+                p.gstin as client_gstin
             FROM invoices i
             LEFT JOIN parties p ON i.client_id = p.id
             WHERE i.id = ?
@@ -426,7 +427,7 @@ class DatabaseService {
         }
         return invoice;
     }
-
+    
     getFilteredInvoices(filters) {
         let query = `
             SELECT 
@@ -605,6 +606,11 @@ class DatabaseService {
         const day = String(date.getDate()).padStart(2, '0');
         const todayCount = this.db.prepare("SELECT COUNT(*) as count FROM invoices WHERE DATE(created_at) = DATE('now')").get().count + 1;
         return `INV-${year}${month}${day}-${String(todayCount).padStart(3, '0')}`;
+    }
+
+checkpointDb() {
+        // This forces a full checkpoint of the WAL file to the main database.
+        return this.db.pragma('wal_checkpoint(FULL)');
     }
 
     close() {
