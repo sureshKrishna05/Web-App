@@ -402,7 +402,7 @@ class DatabaseService {
         return transaction(invoiceData);
     }
 
-getInvoiceDetails(invoiceId) {
+    getInvoiceDetails(invoiceId) {
         const invoice = this.db.prepare(`
             SELECT 
                 i.*, 
@@ -426,7 +426,7 @@ getInvoiceDetails(invoiceId) {
             `).all(invoiceId);
         }
         return invoice;
-    }
+    }    
     
     getFilteredInvoices(filters) {
         let query = `
