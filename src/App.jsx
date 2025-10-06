@@ -1,17 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 // --- Import the real page components ---
-import DashboardPage from './pages/DashboardPage';
-import SettingsPage from './pages/SettingsPage'; // Import the new SettingsPage
-import ItemsPage from './pages/ItemsPage';
-import BillingPage from './pages/BillingPage';
-import PartiesPage from './pages/PartiesPage';
-import SuppliersPage from './pages/SuppliersPage';
-import SalesHistoryPage from './pages/SalesHistoryPage';
-import EmployeesPage from './pages/EmployeesPage';
-import ManageEmployeesPage from './pages/ManageEmployeesPage';
-import GroupsPage from './pages/GroupsPage';
-//import PlaceholderPage from './pages/PlaceholderPage';
+import DashboardPage from './pages/DashboardPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
+import ItemsPage from './pages/ItemsPage.jsx';
+import BillingPage from './pages/BillingPage.jsx';
+import PartiesPage from './pages/PartiesPage.jsx';
+import SuppliersPage from './pages/SuppliersPage.jsx';
+import SalesHistoryPage from './pages/SalesHistoryPage.jsx';
+import EmployeesPage from './pages/EmployeesPage.jsx';
+import ManageEmployeesPage from './pages/ManageEmployeesPage.jsx';
+import GroupsPage from './pages/GroupsPage.jsx';
 
 // --- Icon Components ---
 const IconDashboard = () => <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>;
@@ -38,16 +37,20 @@ const navItems = [
 ];
 
 // --- Sidebar Component ---
-const Sidebar = ({ activePage, setActivePage }) => {
+const Sidebar = ({ activePage, setActivePage, settings }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [openSubmenus, setOpenSubmenus] = useState({});
     useEffect(() => { if (isCollapsed) setOpenSubmenus({}); }, [isCollapsed]);
     const handleToggleSubmenu = (menuName) => { if (!isCollapsed) setOpenSubmenus(prev => ({ ...prev, [menuName]: !prev[menuName] })); };
+    
+    // Extract the first part of the address to display as a subtitle
+    const addressSubtitle = settings?.address?.split('\n')[0] || 'Application';
+
     return (
         <nav className={`flex flex-col text-white transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-20' : 'w-64'}`} style={{ backgroundColor: '#31708E' }}>
             <div className="flex items-center p-4 border-b border-white/10 h-[65px] overflow-hidden">
                 <div className="flex-shrink-0"><IconLogo /></div>
-                {!isCollapsed && (<div className="ml-3 whitespace-nowrap"><p className="font-bold text-lg">Matrix Life Science</p><p className="text-xs text-gray-300">Tvs Tolgate, Trichy</p></div>)}
+                {!isCollapsed && (<div className="ml-3 whitespace-nowrap"><p className="font-bold text-lg">{settings?.company_name || 'Pharma App'}</p><p className="text-xs text-gray-300">{addressSubtitle}</p></div>)}
             </div>
             <ul className="flex flex-col p-2 space-y-1 flex-grow overflow-y-auto">
                 {navItems.map((item) => (
@@ -75,7 +78,7 @@ const Sidebar = ({ activePage, setActivePage }) => {
 };
 
 // --- MainContent Component ---
-const MainContent = ({ page, setActivePage }) => {
+const MainContent = ({ page, setActivePage, onSettingsUpdate }) => {
     const renderPage = () => {
         switch (page) {
             case 'Dashboard': return <DashboardPage setActivePage={setActivePage} />;
@@ -87,8 +90,8 @@ const MainContent = ({ page, setActivePage }) => {
             case 'Reports': return <EmployeesPage/>;
             case 'Employee': return <ManageEmployeesPage/>;
             case 'Groups': return <GroupsPage />;
-            case 'Settings': return <SettingsPage />; // Add this line to render the settings page
-            default: return <div>Page not found: {page}</div>;
+            case 'Settings': return <SettingsPage onSettingsUpdate={onSettingsUpdate} />;
+            default: return <div>Coming Soon</div>;
         }
     };
     return (
@@ -103,10 +106,27 @@ const MainContent = ({ page, setActivePage }) => {
 // --- Main App Component ---
 export default function App() {
     const [activePage, setActivePage] = useState('Dashboard');
+    const [settings, setSettings] = useState(null);
+
+    const fetchSettings = useCallback(async () => {
+        try {
+            const data = await window.electronAPI.getSettings();
+            if (data) {
+                setSettings(data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch settings for app:", err);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchSettings();
+    }, [fetchSettings]);
+
     return (
         <div className="flex flex-row h-screen w-screen overflow-hidden">
-            <Sidebar activePage={activePage} setActivePage={setActivePage} />
-            <MainContent page={activePage} setActivePage={setActivePage} />
+            <Sidebar activePage={activePage} setActivePage={setActivePage} settings={settings} />
+            <MainContent page={activePage} setActivePage={setActivePage} onSettingsUpdate={fetchSettings} />
         </div>
     );
 }

@@ -26,7 +26,7 @@ const Notification = ({ message, type, onDismiss }) => {
 };
 
 
-const SettingsPage = () => {
+const SettingsPage = ({ onSettingsUpdate }) => {
     const [activeTab, setActiveTab] = useState('profile');
     const [settings, setSettings] = useState({
         company_name: '',
@@ -71,6 +71,9 @@ const SettingsPage = () => {
         try {
             await window.electronAPI.updateSettings(settings);
             showNotification("Settings saved successfully!", "success");
+            if (onSettingsUpdate) {
+                onSettingsUpdate(); // Notify parent component to re-fetch settings
+            }
         } catch (err) {
             console.error("Failed to save settings:", err);
             showNotification("Failed to save settings.", "error");
@@ -136,7 +139,7 @@ const SettingsPage = () => {
                     <div className="space-y-6">
                         <div className="p-4 border rounded-lg">
                             <h3 className="font-semibold text-lg">Backup All Application Data</h3>
-                            <p className="text-sm text-gray-600 mt-1">Create a single backup file (.json) containing all your items, clients, suppliers, and invoice history. Keep this file in a safe place.</p>
+                            <p className="text-sm text-gray-600 mt-1">Create a single backup file (.db) containing all your items, clients, suppliers, and invoice history. Keep this file in a safe place.</p>
                             <div className="text-right mt-4">
                                 <button onClick={handleBackup} className="bg-green-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-green-700">
                                     Backup Data

@@ -97,7 +97,8 @@ function setupPdfHandlers() {
         settings
       };
 
-      const { filePath } = dialog.showSaveDialogSync({
+      // FIX #1: Removed incorrect destructuring of filePath.
+      const filePath = dialog.showSaveDialogSync({
         title: 'Download Invoice PDF',
         defaultPath: `invoice-${pdfData.invoiceNumber}.pdf`,
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
@@ -137,7 +138,8 @@ function setupPdfHandlers() {
             settings
         };
 
-        const { filePath } = dialog.showSaveDialogSync({
+        // FIX #1: Removed incorrect destructuring of filePath here as well.
+        const filePath = dialog.showSaveDialogSync({
             title: 'Download Quotation PDF',
             defaultPath: `quotation-${pdfData.quotationNumber}.pdf`,
             filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
@@ -338,6 +340,12 @@ const createWindows = () => {
     },
   });
 
+  // FIX #2: Ensure the app quits when the main window is closed.
+  mainWindow.on('closed', () => {
+    if (db) db.close();
+    app.quit();
+  });
+
   printWindow = new BrowserWindow({ show: false });
   
   const isDev = !app.isPackaged;
@@ -375,7 +383,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindows();
   }

@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 const BillingPage = () => {
+    // --- STATE for data and UI ---
     const [clientSuggestions, setClientSuggestions] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
     const [clientSearch, setClientSearch] = useState('');
@@ -22,6 +23,18 @@ const BillingPage = () => {
     const [totals, setTotals] = useState({ subtotal: 0, tax: 0, finalAmount: 0 });
     const [paymentMode, setPaymentMode] = useState('Credit');
 
+    // --- STATE for keyboard navigation ---
+    const [highlightedClientIndex, setHighlightedClientIndex] = useState(-1);
+    const [highlightedMedicineIndex, setHighlightedMedicineIndex] = useState(-1);
+
+    // --- REFS for focus management ---
+    const clientInputRef = useRef(null);
+    const medicineInputRef = useRef(null);
+    const ptrInputRef = useRef(null);
+    const quantityInputRef = useRef(null);
+    const addItemButtonRef = useRef(null);
+
+
     useEffect(() => {
         const fetchInitialData = async () => {
             const newInvoiceNum = await window.electronAPI.generateInvoiceNumber();
@@ -32,32 +45,11 @@ const BillingPage = () => {
         fetchInitialData();
     }, []);
 
-    const handleSaveNewClient = async () => {
-        if (!clientSearch.trim()) {
-            console.error("Please enter a client name before saving.");
-            return;
-        }
-
-        try {
-            const newParty = await window.electronAPI.addParty({ 
-                name: clientSearch.trim(), 
-                ...newClientDetails 
-            });
-            
-            if (newParty) {
-                setSelectedClient(newParty);
-                setIsNewClient(false); 
-                setClientSuggestions([]);
-                console.log("New client saved successfully:", newParty);
-            }
-        } catch (error) {
-            console.error("Failed to save new client:", error);
-        }
-    };
-
+    // --- Client Search and Selection ---
     const handleClientSearch = useCallback(async (query) => {
         setClientSearch(query);
         setSelectedClient(null);
+        setHighlightedClientIndex(-1);
         if (query.length > 1) {
             const results = await window.electronAPI.searchParties(query);
             setClientSuggestions(results);
@@ -73,10 +65,34 @@ const BillingPage = () => {
         setClientSearch(client.name);
         setClientSuggestions([]);
         setIsNewClient(false);
+        setHighlightedClientIndex(-1);
+        medicineInputRef.current.focus(); // Move focus to medicine input
+    };
+
+    const handleSaveNewClient = async () => {
+        if (!clientSearch.trim()) {
+            console.error("Please enter a client name before saving.");
+            return;
+        }
+        try {
+            const newParty = await window.electronAPI.addParty({ 
+                name: clientSearch.trim(), 
+                ...newClientDetails 
+            });
+            
+            if (newParty) {
+                handleSelectClient(newParty);
+                console.log("New client saved successfully:", newParty);
+            }
+        } catch (error) {
+            console.error("Failed to save new client:", error);
+        }
     };
     
+    // --- Medicine Search and Selection ---
     const handleMedicineSearch = useCallback(async (query) => {
         setMedicineSearch(query);
+        setHighlightedMedicineIndex(-1);
         if (query.length > 1) {
             const results = await window.electronAPI.searchMedicines(query);
             setMedicineSuggestions(results);
@@ -98,6 +114,8 @@ const BillingPage = () => {
             gst_percentage: med.gst_percentage
         });
         setMedicineSuggestions([]);
+        setHighlightedMedicineIndex(-1);
+        ptrInputRef.current.focus(); // Move focus to PTR input
     };
     
     const handleAddItem = () => {
@@ -111,15 +129,59 @@ const BillingPage = () => {
         };
         setBillItems(prev => [...prev, newItem]);
 
+        // Reset medicine fields for next entry
         setMedicineSearch('');
         setSelectedMedicine(null);
         setItemDetails({ hsn: '', batch_number: '', expiry_date: '', ptr: '', quantity: 1, available_stock: '' });
+        medicineInputRef.current.focus(); // Focus back to medicine input
     };
 
     const handleRemoveItem = (index) => {
         setBillItems(items => items.filter((_, i) => i !== index));
     };
 
+    // --- KEYDOWN Handlers for Navigation ---
+    const handleClientKeyDown = (e) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setHighlightedClientIndex(prev => (prev + 1) % clientSuggestions.length);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setHighlightedClientIndex(prev => (prev - 1 + clientSuggestions.length) % clientSuggestions.length);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (highlightedClientIndex > -1) {
+                handleSelectClient(clientSuggestions[highlightedClientIndex]);
+            } else if (isNewClient) {
+                // Potentially trigger save or move to next field if desired
+            }
+        }
+    };
+
+    const handleMedicineKeyDown = (e) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setHighlightedMedicineIndex(prev => (prev + 1) % medicineSuggestions.length);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setHighlightedMedicineIndex(prev => (prev - 1 + medicineSuggestions.length) % medicineSuggestions.length);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (highlightedMedicineIndex > -1) {
+                handleSelectMedicine(medicineSuggestions[highlightedMedicineIndex]);
+            }
+        }
+    };
+    
+    const handleGenericKeyDown = (e, nextRef) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            nextRef.current.focus();
+        }
+    };
+
+
+    // --- Totals Calculation ---
     useEffect(() => {
         const subtotal = billItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
         
@@ -133,6 +195,7 @@ const BillingPage = () => {
         setTotals({ subtotal, tax: totalTax, finalAmount });
     }, [billItems]);
 
+    // --- Form Actions ---
     const resetForm = async () => {
         setClientSearch(''); 
         setSelectedClient(null); 
@@ -144,69 +207,28 @@ const BillingPage = () => {
     };
 
     const handleSaveInvoice = async (status) => {
-        if (!clientSearch.trim()) { 
-            console.error("Client name is required."); 
-            return; 
-        }
-        if (billItems.length === 0) { 
-            console.error("Cannot save an empty invoice."); 
-            return; 
-        }
-
-        if (isNewClient) {
-            console.error("Please save the new client's details before creating an invoice.");
+        if (!clientSearch.trim() || billItems.length === 0 || isNewClient || !selectedClient) {
+            console.error("Form is incomplete. Check client and items.");
             return;
         }
-
-        if (!selectedClient) {
-            console.error("Please select a client for the invoice.");
-            return;
-        }
-
-        const clientForInvoice = selectedClient;
 
         const invoiceData = {
             invoice_number: invoiceNumber,
-            client_id: clientForInvoice?.id,
-            client_name: clientForInvoice?.name || clientSearch,
+            client_id: selectedClient?.id,
+            client_name: selectedClient?.name || clientSearch,
             sales_rep_id: selectedRepId || null,
             total_amount: totals.subtotal,
             tax: totals.tax,
             final_amount: totals.finalAmount,
             payment_mode: paymentMode,
             status: status,
-            items: billItems.map(item => ({
-                medicine_id: item.id,
-                name: item.name,
-                hsn: item.hsn,
-                batch_number: item.batch_number,
-                quantity: item.quantity,
-                free_quantity: 0,
-                unit_price: item.price,
-                ptr: item.ptr,
-                total_price: item.price * item.quantity
-            }))
+            items: billItems.map(item => ({ medicine_id: item.id, name: item.name, hsn: item.hsn, batch_number: item.batch_number, quantity: item.quantity, free_quantity: 0, unit_price: item.price, ptr: item.ptr, total_price: item.price * item.quantity }))
         };
         
         try {
             await window.electronAPI.createInvoice(invoiceData);
-            
-            // Prepare data for printing
-            const pdfData = {
-                invoiceNumber,
-                paymentMode,
-                client: clientForInvoice,
-                billItems,
-                totals,
-            };
-
-            // Determine if it's an invoice or quotation and print
-            if (status === 'Completed') {
-                await window.electronAPI.printPDF(pdfData, 'invoice');
-            } else if (status === 'Estimate') {
-                await window.electronAPI.printPDF(pdfData, 'quotation');
-            }
-            
+            const pdfData = { invoiceNumber, paymentMode, client: selectedClient, billItems, totals };
+            await window.electronAPI.printPDF(pdfData, status === 'Completed' ? 'invoice' : 'quotation');
             resetForm();
         } catch (error) {
             console.error("Failed to save or print invoice:", error);
@@ -220,10 +242,10 @@ const BillingPage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="relative">
                         <label className="text-sm font-medium">Client</label>
-                        <input type="text" value={clientSearch} onChange={(e) => handleClientSearch(e.target.value)} className="w-full p-2 border rounded"/>
+                        <input type="text" ref={clientInputRef} value={clientSearch} onChange={(e) => handleClientSearch(e.target.value)} onKeyDown={handleClientKeyDown} className="w-full p-2 border rounded"/>
                         {clientSuggestions.length > 0 && (
                             <div className="absolute z-20 w-full bg-white border rounded mt-1 shadow-lg">
-                                {clientSuggestions.map(c => <div key={c.id} onClick={() => handleSelectClient(c)} className="p-2 hover:bg-gray-100 cursor-pointer">{c.name}</div>)}
+                                {clientSuggestions.map((c, index) => <div key={c.id} onClick={() => handleSelectClient(c)} className={`p-2 cursor-pointer ${index === highlightedClientIndex ? 'bg-blue-100' : 'hover:bg-gray-100'}`}>{c.name}</div>)}
                             </div>
                         )}
                         {selectedClient && <div className="text-xs text-gray-500 mt-1">GSTIN: {selectedClient.gstin} | Phone: {selectedClient.phone}</div>}
@@ -235,40 +257,29 @@ const BillingPage = () => {
                 {/* New Client Form */}
                 {isNewClient && (
                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 p-4 border rounded border-blue-200 bg-blue-50 items-end">
-                        <div>
-                            <label className="text-xs">Phone</label>
-                            <input type="text" placeholder="Phone" value={newClientDetails.phone} onChange={e => setNewClientDetails({...newClientDetails, phone: e.target.value})} className="p-2 border rounded w-full"/>
-                        </div>
-                        <div>
-                            <label className="text-xs">GSTIN</label>
-                            <input type="text" placeholder="GSTIN" value={newClientDetails.gstin} onChange={e => setNewClientDetails({...newClientDetails, gstin: e.target.value})} className="p-2 border rounded w-full"/>
-                        </div>
-                        <div>
-                            <label className="text-xs">Address</label>
-                            <input type="text" placeholder="Address" value={newClientDetails.address} onChange={e => setNewClientDetails({...newClientDetails, address: e.target.value})} className="p-2 border rounded w-full"/>
-                        </div>
-                        <button onClick={handleSaveNewClient} className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 h-10">
-                            Save Client
-                        </button>
+                        <div><label className="text-xs">Phone</label><input type="text" placeholder="Phone" value={newClientDetails.phone} onChange={e => setNewClientDetails({...newClientDetails, phone: e.target.value})} className="p-2 border rounded w-full"/></div>
+                        <div><label className="text-xs">GSTIN</label><input type="text" placeholder="GSTIN" value={newClientDetails.gstin} onChange={e => setNewClientDetails({...newClientDetails, gstin: e.target.value})} className="p-2 border rounded w-full"/></div>
+                        <div><label className="text-xs">Address</label><input type="text" placeholder="Address" value={newClientDetails.address} onChange={e => setNewClientDetails({...newClientDetails, address: e.target.value})} className="p-2 border rounded w-full"/></div>
+                        <button onClick={handleSaveNewClient} className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 h-10">Save Client</button>
                     </div>
                 )}
                 
                 {/* Item Entry Form */}
                 <div className="grid grid-cols-9 gap-2 items-end p-2 border-t mt-4">
-                    <div className="col-span-2 relative"><label className="text-xs">Select Medicine</label><input type="text" value={medicineSearch} onChange={e => handleMedicineSearch(e.target.value)} className="w-full p-2 border rounded"/>
+                    <div className="col-span-2 relative"><label className="text-xs">Select Medicine</label><input type="text" ref={medicineInputRef} value={medicineSearch} onChange={e => handleMedicineSearch(e.target.value)} onKeyDown={handleMedicineKeyDown} className="w-full p-2 border rounded"/>
                         {medicineSuggestions.length > 0 && (
                             <div className="absolute z-20 w-full bg-white border rounded mt-1 shadow-lg max-h-48 overflow-y-auto">
-                                {medicineSuggestions.map(m => <div key={m.id} onClick={() => handleSelectMedicine(m)} className="p-2 hover:bg-gray-100 cursor-pointer">{m.name}</div>)}
+                                {medicineSuggestions.map((m, index) => <div key={m.id} onClick={() => handleSelectMedicine(m)} className={`p-2 cursor-pointer ${index === highlightedMedicineIndex ? 'bg-blue-100' : 'hover:bg-gray-100'}`}>{m.name}</div>)}
                             </div>
                         )}
                     </div>
                     <div><label className="text-xs">HSN</label><input type="text" value={itemDetails.hsn} readOnly className="w-full p-2 border rounded bg-gray-100"/></div>
                     <div><label className="text-xs">Batch No</label><input type="text" value={itemDetails.batch_number} readOnly className="w-full p-2 border rounded bg-gray-100"/></div>
                     <div><label className="text-xs">Expiry</label><input type="text" value={itemDetails.expiry_date} readOnly className="w-full p-2 border rounded bg-gray-100"/></div>
-                    <div><label className="text-xs">PTR</label><input type="number" value={itemDetails.ptr} onChange={e => setItemDetails({...itemDetails, ptr: e.target.value})} className="w-full p-2 border rounded"/></div>
-                    <div><label className="text-xs">Qty</label><input type="number" value={itemDetails.quantity} onChange={e => setItemDetails({...itemDetails, quantity: e.target.value})} className="w-full p-2 border rounded"/></div>
+                    <div><label className="text-xs">PTR</label><input type="number" ref={ptrInputRef} value={itemDetails.ptr} onChange={e => setItemDetails({...itemDetails, ptr: e.target.value})} onKeyDown={(e) => handleGenericKeyDown(e, quantityInputRef)} className="w-full p-2 border rounded"/></div>
+                    <div><label className="text-xs">Qty</label><input type="number" ref={quantityInputRef} value={itemDetails.quantity} onChange={e => setItemDetails({...itemDetails, quantity: e.target.value})} onKeyDown={(e) => handleGenericKeyDown(e, addItemButtonRef)} className="w-full p-2 border rounded"/></div>
                     <div><label className="text-xs">Available</label><input type="text" value={itemDetails.available_stock} readOnly className="w-full p-2 border rounded bg-gray-100"/></div>
-                    <div><button onClick={handleAddItem} className="w-full bg-green-500 text-white p-2 rounded">Add</button></div>
+                    <div><button ref={addItemButtonRef} onClick={handleAddItem} onKeyDown={(e) => {if (e.key === 'Enter') { e.preventDefault(); handleAddItem(); }}} className="w-full bg-green-500 text-white p-2 rounded">Add</button></div>
                 </div>
 
                 {/* Bill Items Table */}

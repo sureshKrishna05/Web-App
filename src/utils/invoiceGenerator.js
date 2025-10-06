@@ -7,10 +7,20 @@ function createInvoice(invoice, path) {
 
     doc.pipe(fs.createWriteStream(path));
 
+    const settings = invoice.settings || {};
+
     // --- Header ---
-    doc.fontSize(20).font('Helvetica-Bold').text('Matrix Life Science', { align: 'center' });
-    doc.fontSize(10).font('Helvetica').text('PLOT NO 4, FIRST FLOOR, INDIRA STREET,', { align: 'center' });
-    doc.text('SUNDAR NAGAR 5 TH CROSS, TRICHY 620021', { align: 'center' });
+    doc.fontSize(20).font('Helvetica-Bold').text(settings.company_name || 'Your Company Name', { align: 'center' });
+    if (settings.address) {
+        // Split address into lines and print each one
+        const addressLines = settings.address.split('\n');
+        addressLines.forEach(line => {
+            doc.fontSize(10).font('Helvetica').text(line, { align: 'center' });
+        });
+    } else {
+        doc.fontSize(10).font('Helvetica').text('Your Company Address Line 1', { align: 'center' });
+        doc.text('Address Line 2', { align: 'center' });
+    }
     doc.moveDown(2);
 
     // --- Invoice Info ---
@@ -68,10 +78,10 @@ function createInvoice(invoice, path) {
     doc.font('Helvetica-Bold').text('Subtotal:', 350, totalsTop, { align: 'right', width: 100 });
     doc.font('Helvetica').text(`₹${subtotal.toFixed(2)}`, 460, totalsTop, { align: 'right', width: 90 });
 
-    doc.font('Helvetica-Bold').text('SGST (2.5%):', 350, totalsTop + 15, { align: 'right', width: 100 });
+    doc.font('Helvetica-Bold').text('SGST (9%):', 350, totalsTop + 15, { align: 'right', width: 100 });
     doc.font('Helvetica').text(`₹${sgst}`, 460, totalsTop + 15, { align: 'right', width: 90 });
 
-    doc.font('Helvetica-Bold').text('CGST (2.5%):', 350, totalsTop + 30, { align: 'right', width: 100 });
+    doc.font('Helvetica-Bold').text('CGST (9%):', 350, totalsTop + 30, { align: 'right', width: 100 });
     doc.font('Helvetica').text(`₹${cgst}`, 460, totalsTop + 30, { align: 'right', width: 90 });
     
     doc.moveTo(350, totalsTop + 48).lineTo(550, totalsTop + 48).stroke();
@@ -85,9 +95,10 @@ function createInvoice(invoice, path) {
 
     // --- Footer ---
     const footerY = doc.page.height - 100;
-    doc.fontSize(8).font('Helvetica-Oblique').text('E.&.O.E', 50, footerY);
-    doc.text('SUBJECT TO TRICHY JURISDICTION ONLY', 50, footerY + 10);
-    doc.font('Helvetica-Bold').text('For Matrix Life Science', 400, footerY + 30, { align: 'right' });
+    if (settings.footer_text) {
+        doc.fontSize(8).font('Helvetica-Oblique').text(settings.footer_text, { align: 'center' });
+    }
+    doc.font('Helvetica-Bold').text(`For ${settings.company_name || 'Your Company Name'}`, 50, footerY + 30, { align: 'right' });
 
 
     doc.end();
@@ -97,10 +108,18 @@ function createQuotation(quotation, path) {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
 
     doc.pipe(fs.createWriteStream(path));
+    
+    const settings = quotation.settings || {};
 
     // --- Header ---
     doc.fontSize(22).font('Helvetica-Bold').text('QUOTATION', { align: 'center' });
-    doc.fontSize(16).font('Helvetica').text('Matrix Life Science', { align: 'center' });
+    doc.fontSize(16).font('Helvetica').text(settings.company_name || 'Your Company Name', { align: 'center' });
+    if (settings.address) {
+        const addressLines = settings.address.split('\n');
+        addressLines.forEach(line => {
+            doc.fontSize(10).font('Helvetica').text(line, { align: 'center' });
+        });
+    }
     doc.moveDown(2);
 
     // --- Info ---
