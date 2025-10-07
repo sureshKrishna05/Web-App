@@ -97,7 +97,6 @@ function setupPdfHandlers() {
         settings
       };
 
-      // FIX #1: Removed incorrect destructuring of filePath.
       const filePath = dialog.showSaveDialogSync({
         title: 'Download Invoice PDF',
         defaultPath: `invoice-${pdfData.invoiceNumber}.pdf`,
@@ -138,7 +137,6 @@ function setupPdfHandlers() {
             settings
         };
 
-        // FIX #1: Removed incorrect destructuring of filePath here as well.
         const filePath = dialog.showSaveDialogSync({
             title: 'Download Quotation PDF',
             defaultPath: `quotation-${pdfData.quotationNumber}.pdf`,
@@ -212,7 +210,7 @@ function setupExportHandlers() {
             const records = db.getInvoicesForExport(invoiceIds);
             if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
 
-            const { filePath } = dialog.showSaveDialogSync({ title: 'Export to CSV', defaultPath: `sales-${Date.now()}.csv` });
+            const filePath = dialog.showSaveDialogSync({ title: 'Export to CSV', defaultPath: `sales-${Date.now()}.csv` });
             if (!filePath) return { success: false, message: 'Save cancelled.' };
 
             const worksheet = XLSX.utils.json_to_sheet(records);
@@ -232,7 +230,7 @@ function setupExportHandlers() {
             const records = db.getInvoicesForExport(invoiceIds);
             if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
             
-            const { filePath } = dialog.showSaveDialogSync({ title: 'Export to Excel', defaultPath: `sales-${Date.now()}.xlsx` });
+            const filePath = dialog.showSaveDialogSync({ title: 'Export to Excel', defaultPath: `sales-${Date.now()}.xlsx` });
             if (!filePath) return { success: false, message: 'Save cancelled.' };
             
             const worksheet = XLSX.utils.json_to_sheet(records);
@@ -253,9 +251,9 @@ function setupSettingsHandlers() {
 }
 
 function setupBackupRestoreHandlers() {
-    ipcMain.handle('backup-data', async () => {
+    ipcMain.handle('backup-data', () => {
         try {
-            const { filePath } = await dialog.showSaveDialog({
+            const filePath = dialog.showSaveDialogSync(mainWindow, {
                 title: 'Backup Database',
                 defaultPath: `backup-${Date.now()}.db`,
                 filters: [{ name: 'Database Files', extensions: ['db'] }]
@@ -273,9 +271,9 @@ function setupBackupRestoreHandlers() {
         }
     });
 
-    ipcMain.handle('restore-data', async () => {
+    ipcMain.handle('restore-data', () => {
         try {
-            const { filePaths } = await dialog.showOpenDialog({
+            const filePaths = dialog.showOpenDialogSync(mainWindow, {
                 title: 'Restore Database',
                 properties: ['openFile'],
                 filters: [{ name: 'Database Files', extensions: ['db'] }]
@@ -340,7 +338,6 @@ const createWindows = () => {
     },
   });
 
-  // FIX #2: Ensure the app quits when the main window is closed.
   mainWindow.on('closed', () => {
     if (db) db.close();
     app.quit();
@@ -383,7 +380,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
+
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindows();
   }
 });
+
