@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const XLSX = require('xlsx');
+const express = require('express');
 
 // --- START: CORRECTED REQUIRE STATEMENTS ---
 const DatabaseService = require('./src/database/database.js');
@@ -16,78 +17,58 @@ if (require('electron-squirrel-startup')) {
 
 // --- Global Variables ---
 let db;
-let mainWindow;
-let printWindow; // Hidden window for silent printing
+const expressApp = express();
+const PORT = 3300;
+
+// --- Server Setup ---
+// Serve the React build files from the 'dist' directory
+expressApp.use(express.static(path.join(__dirname, 'dist')));
+
 
 // --- IPC Handlers Setup ---
-function setupPdfHandlers() {
+// This function initializes all the backend API endpoints your React app can call.
+function initializeIpcHandlers() {
   if (!db) return;
 
+  // --- PDF & Document Handlers ---
+  // Note: Printing is now handled by saving the file, which the user can then print from their browser.
   ipcMain.handle('print-pdf', async (event, pdfData, type = 'invoice') => {
-    const tempDir = os.tmpdir();
-    const tempFilePath = path.join(tempDir, `print-${Date.now()}.pdf`);
+    const settings = db.getSettings();
+    const fullPdfData = { ...pdfData, settings };
+    const filePath = dialog.showSaveDialogSync({
+        title: `Save ${type}`,
+        defaultPath: `${type}-${Date.now()}.pdf`,
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+    });
 
-    try {
-      const settings = db.getSettings();
-      const fullPdfData = { ...pdfData, settings };
-
-      if (type === 'invoice') {
-        createInvoice(fullPdfData, tempFilePath);
-      } else if (type === 'quotation') {
-        createQuotation(fullPdfData, tempFilePath);
-      } else {
-        throw new Error(`Invalid document type for printing: ${type}`);
-      }
-
-      await printWindow.loadFile(tempFilePath);
-      
-      await new Promise((resolve, reject) => {
-        printWindow.webContents.print({ silent: false, printBackground: true }, (success, reason) => {
-          if (success) {
-            resolve();
-          } else {
-            reject(new Error(`Printing failed: ${reason}`));
-          }
-        });
-      });
-
-      fs.unlink(tempFilePath, (err) => {
-        if (err) console.error('Failed to delete temporary PDF:', err);
-      });
-
-      return { success: true };
-    } catch (error) {
-      console.error('Failed to create or print PDF:', error);
-      if (fs.existsSync(tempFilePath)) {
-        fs.unlinkSync(tempFilePath);
-      }
-      return { success: false, message: error.message };
+    if (filePath) {
+        if (type === 'invoice') {
+            createInvoice(fullPdfData, filePath);
+        } else {
+            createQuotation(fullPdfData, filePath);
+        }
+        return { success: true, path: filePath };
     }
+    return { success: false, message: 'Save cancelled.' };
   });
 
-  // --- START: CORRECTED DOWNLOAD-INVOICE-PDF HANDLER ---
   ipcMain.handle('download-invoice-pdf', (event, invoiceId) => {
     try {
       const invoiceDetails = db.getInvoiceDetails(invoiceId);
       if (!invoiceDetails) {
         throw new Error('Invoice not found.');
       }
-
-      // Construct a client object directly from the query results.
-      // This gracefully handles cases where the client was deleted (fields will be null).
       const clientForPdf = {
           name: invoiceDetails.client_name,
           address: invoiceDetails.client_address,
           phone: invoiceDetails.client_phone,
           gstin: invoiceDetails.client_gstin
       };
-
       const settings = db.getSettings();
-
       const pdfData = {
         invoiceNumber: invoiceDetails.invoice_number,
         paymentMode: invoiceDetails.payment_mode || 'N/A',
-        client: clientForPdf, // Use the safely constructed client object
+        client: clientForPdf,
         billItems: invoiceDetails.items.map(item => ({ ...item, name: item.medicine_name, price: item.unit_price })),
         totals: {
           subtotal: invoiceDetails.total_amount,
@@ -96,13 +77,11 @@ function setupPdfHandlers() {
         },
         settings
       };
-
       const filePath = dialog.showSaveDialogSync({
         title: 'Download Invoice PDF',
         defaultPath: `invoice-${pdfData.invoiceNumber}.pdf`,
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
       });
-
       if (filePath) {
         createInvoice(pdfData, filePath);
         return { success: true, path: filePath };
@@ -113,7 +92,6 @@ function setupPdfHandlers() {
       return { success: false, message: error.message };
     }
   });
-  // --- END: CORRECTED DOWNLOAD-INVOICE-PDF HANDLER ---
   
   ipcMain.handle('download-quotation-pdf', (event, quotationId) => {
     try {
@@ -153,236 +131,167 @@ function setupPdfHandlers() {
         return { success: false, message: error.message };
     }
   });
-}
 
-function setupSupplierHandlers() {
-    ipcMain.handle('get-all-suppliers', () => db.getAllSuppliers());
-    ipcMain.handle('add-supplier', (event, supplier) => db.addSupplier(supplier));
-    ipcMain.handle('update-supplier', (event, id, supplier) => db.updateSupplier(id, supplier));
-    ipcMain.handle('delete-supplier', (event, id) => db.deleteSupplier(id));
-}
+  // --- Data Handlers (Suppliers, Parties, etc.) ---
+  // These remain largely the same as they are backend logic.
+  ipcMain.handle('get-all-suppliers', () => db.getAllSuppliers());
+  ipcMain.handle('add-supplier', (event, supplier) => db.addSupplier(supplier));
+  ipcMain.handle('update-supplier', (event, id, supplier) => db.updateSupplier(id, supplier));
+  ipcMain.handle('delete-supplier', (event, id) => db.deleteSupplier(id));
 
-function setupPartyHandlers() {
-    ipcMain.handle('get-all-parties', () => db.getAllParties());
-    ipcMain.handle('get-party-by-id', (event, id) => db.getPartyById(id));
-    ipcMain.handle('add-party', (event, party) => db.addParty(party));
-    ipcMain.handle('update-party', (event, id, party) => db.updateParty(id, party));
-    ipcMain.handle('delete-party', (event, id) => db.deleteParty(id));
-    ipcMain.handle('search-parties', (event, searchTerm) => db.searchParties(searchTerm));
-    ipcMain.handle('get-party-by-name', (event, name) => db.getPartyByName(name));
-}
+  ipcMain.handle('get-all-parties', () => db.getAllParties());
+  ipcMain.handle('get-party-by-id', (event, id) => db.getPartyById(id));
+  ipcMain.handle('add-party', (event, party) => db.addParty(party));
+  ipcMain.handle('update-party', (event, id, party) => db.updateParty(id, party));
+  ipcMain.handle('delete-party', (event, id) => db.deleteParty(id));
+  ipcMain.handle('search-parties', (event, searchTerm) => db.searchParties(searchTerm));
+  ipcMain.handle('get-party-by-name', (event, name) => db.getPartyByName(name));
 
-function setupSalesRepHandlers() {
-    ipcMain.handle('get-all-sales-reps', () => db.getAllSalesReps());
-    ipcMain.handle('add-sales-rep', (event, employeeData) => db.addSalesRep(employeeData));
-    ipcMain.handle('delete-sales-rep', (event, id) => db.deleteSalesRep(id));
-    ipcMain.handle('get-rep-performance', (event, { repId, month }) => db.getRepPerformance(repId, month));
-    ipcMain.handle('set-rep-target', (event, { repId, month, targetAmount }) => db.setRepTarget(repId, month, targetAmount));
-}
+  ipcMain.handle('get-all-sales-reps', () => db.getAllSalesReps());
+  ipcMain.handle('add-sales-rep', (event, employeeData) => db.addSalesRep(employeeData));
+  ipcMain.handle('delete-sales-rep', (event, id) => db.deleteSalesRep(id));
+  ipcMain.handle('get-rep-performance', (event, { repId, month }) => db.getRepPerformance(repId, month));
+  ipcMain.handle('set-rep-target', (event, { repId, month, targetAmount }) => db.setRepTarget(repId, month, targetAmount));
 
-function setupMedicineHandlers() {
-    ipcMain.handle('get-all-medicines', () => db.getAllMedicines());
-    ipcMain.handle('search-medicines', (event, searchTerm) => db.searchMedicines(searchTerm));
-    ipcMain.handle('add-medicine', (event, medicine) => db.addMedicine(medicine));
-    ipcMain.handle('update-medicine', (event, id, medicine) => db.updateMedicine(id, medicine));
-    ipcMain.handle('delete-medicine', (event, id) => db.deleteMedicine(id));
-}
+  ipcMain.handle('get-all-medicines', () => db.getAllMedicines());
+  ipcMain.handle('search-medicines', (event, searchTerm) => db.searchMedicines(searchTerm));
+  ipcMain.handle('add-medicine', (event, medicine) => db.addMedicine(medicine));
+  ipcMain.handle('update-medicine', (event, id, medicine) => db.updateMedicine(id, medicine));
+  ipcMain.handle('delete-medicine', (event, id) => db.deleteMedicine(id));
 
-function setupGroupHandlers() {
-    ipcMain.handle('get-all-groups', () => db.getAllGroups());
-    ipcMain.handle('get-group-details', (event, id) => db.getGroupDetails(id));
-    ipcMain.handle('add-group', (event, group) => db.addGroup(group));
-    ipcMain.handle('update-group-gst', (event, { id, gst_percentage }) => db.updateGroupGst(id, gst_percentage));
-    ipcMain.handle('delete-group', (event, id) => db.deleteGroup(id));
-}
+  ipcMain.handle('get-all-groups', () => db.getAllGroups());
+  ipcMain.handle('get-group-details', (event, id) => db.getGroupDetails(id));
+  ipcMain.handle('add-group', (event, group) => db.addGroup(group));
+  ipcMain.handle('update-group-gst', (event, { id, gst_percentage }) => db.updateGroupGst(id, gst_percentage));
+  ipcMain.handle('delete-group', (event, id) => db.deleteGroup(id));
 
-function setupInvoiceHandlers() {
-    ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));
-    ipcMain.handle('get-filtered-invoices', (event, filters) => db.getFilteredInvoices(filters));
-    ipcMain.handle('get-invoice-details', (event, invoiceId) => db.getInvoiceDetails(invoiceId));
-    ipcMain.handle('generate-invoice-number', () => db.generateInvoiceNumber());
-}
+  ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));
+  ipcMain.handle('get-filtered-invoices', (event, filters) => db.getFilteredInvoices(filters));
+  ipcMain.handle('get-invoice-details', (event, invoiceId) => db.getInvoiceDetails(invoiceId));
+  ipcMain.handle('generate-invoice-number', () => db.generateInvoiceNumber());
 
-function setupExportHandlers() {
-    ipcMain.handle('export-invoices-csv', (event, invoiceIds) => {
-        try {
-            if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
-            const records = db.getInvoicesForExport(invoiceIds);
-            if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
+  ipcMain.handle('export-invoices-csv', (event, invoiceIds) => {
+    try {
+        if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
+        const records = db.getInvoicesForExport(invoiceIds);
+        if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
+        const filePath = dialog.showSaveDialogSync({ title: 'Export to CSV', defaultPath: `sales-${Date.now()}.csv` });
+        if (!filePath) return { success: false, message: 'Save cancelled.' };
+        const worksheet = XLSX.utils.json_to_sheet(records);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
+        XLSX.writeFile(workbook, filePath, { bookType: 'csv' });
+        return { success: true, path: filePath };
+    } catch (error) {
+        return { success: false, message: error.message };
+    }
+  });
 
-            const filePath = dialog.showSaveDialogSync({ title: 'Export to CSV', defaultPath: `sales-${Date.now()}.csv` });
-            if (!filePath) return { success: false, message: 'Save cancelled.' };
+  ipcMain.handle('export-invoices-xlsx', (event, invoiceIds) => {
+    try {
+        if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
+        const records = db.getInvoicesForExport(invoiceIds);
+        if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
+        const filePath = dialog.showSaveDialogSync({ title: 'Export to Excel', defaultPath: `sales-${Date.now()}.xlsx` });
+        if (!filePath) return { success: false, message: 'Save cancelled.' };
+        const worksheet = XLSX.utils.json_to_sheet(records);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
+        XLSX.writeFile(workbook, filePath);
+        return { success: true, path: filePath };
+    } catch (error) {
+        return { success: false, message: error.message };
+    }
+  });
 
-            const worksheet = XLSX.utils.json_to_sheet(records);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
-            XLSX.writeFile(workbook, filePath, { bookType: 'csv' });
+  ipcMain.handle('get-settings', () => db.getSettings());
+  ipcMain.handle('update-settings', (event, settings) => db.updateSettings(settings));
 
+  ipcMain.handle('backup-data', () => {
+    try {
+        const filePath = dialog.showSaveDialogSync(null, {
+            title: 'Backup Database',
+            defaultPath: `backup-${Date.now()}.db`,
+            filters: [{ name: 'Database Files', extensions: ['db'] }]
+        });
+        if (filePath) {
+            db.checkpointDb();
+            fs.copyFileSync(db.getDbPath(), filePath);
             return { success: true, path: filePath };
-        } catch (error) {
-            return { success: false, message: error.message };
         }
-    });
+        return { success: false, message: 'Backup cancelled.' };
+    } catch (error) {
+        return { success: false, message: error.message };
+    }
+  });
 
-    ipcMain.handle('export-invoices-xlsx', (event, invoiceIds) => {
-        try {
-            if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
-            const records = db.getInvoicesForExport(invoiceIds);
-            if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
-            
-            const filePath = dialog.showSaveDialogSync({ title: 'Export to Excel', defaultPath: `sales-${Date.now()}.xlsx` });
-            if (!filePath) return { success: false, message: 'Save cancelled.' };
-            
-            const worksheet = XLSX.utils.json_to_sheet(records);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
-            XLSX.writeFile(workbook, filePath);
-
-            return { success: true, path: filePath };
-        } catch (error) {
-            return { success: false, message: error.message };
-        }
-    });
-}
-
-function setupSettingsHandlers() {
-    ipcMain.handle('get-settings', () => db.getSettings());
-    ipcMain.handle('update-settings', (event, settings) => db.updateSettings(settings));
-}
-
-function setupBackupRestoreHandlers() {
-    ipcMain.handle('backup-data', () => {
-        try {
-            const filePath = dialog.showSaveDialogSync(mainWindow, {
-                title: 'Backup Database',
-                defaultPath: `backup-${Date.now()}.db`,
-                filters: [{ name: 'Database Files', extensions: ['db'] }]
+  ipcMain.handle('restore-data', () => {
+    try {
+        const filePaths = dialog.showOpenDialogSync(null, {
+            title: 'Restore Database',
+            properties: ['openFile'],
+            filters: [{ name: 'Database Files', extensions: ['db'] }]
+        });
+        if (filePaths && filePaths.length > 0) {
+            const backupPath = filePaths[0];
+            const targetPath = db.getDbPath();
+            if (db) db.close();
+            fs.copyFileSync(backupPath, targetPath);
+            dialog.showMessageBoxSync(null, {
+                type: 'info',
+                title: 'Restore Successful',
+                message: 'Data has been restored. The application will now restart.'
             });
-
-            if (filePath) {
-                db.checkpointDb();
-                fs.copyFileSync(db.getDbPath(), filePath);
-                return { success: true, path: filePath };
-            }
-
-            return { success: false, message: 'Backup cancelled.' };
-        } catch (error) {
-            return { success: false, message: error.message };
-        }
-    });
-
-    ipcMain.handle('restore-data', () => {
-        try {
-            const filePaths = dialog.showOpenDialogSync(mainWindow, {
-                title: 'Restore Database',
-                properties: ['openFile'],
-                filters: [{ name: 'Database Files', extensions: ['db'] }]
-            });
-
-            if (filePaths && filePaths.length > 0) {
-                const backupPath = filePaths[0];
-                const targetPath = db.getDbPath();
-
-                if (db) db.close();
-
-                fs.copyFileSync(backupPath, targetPath);
-
-                dialog.showMessageBoxSync(mainWindow, {
-                    type: 'info',
-                    title: 'Restore Successful',
-                    message: 'Data has been restored. The application will now restart.'
-                });
-                
-                app.relaunch();
-                app.quit();
-
-                return { success: true };
-            }
-            return { success: false, message: 'Restore cancelled.' };
-        } catch (error) {
-            dialog.showErrorBox('Restore Failed', `An error occurred: ${error.message}. Please restart the application.`);
+            app.relaunch();
             app.quit();
-            return { success: false, message: error.message };
+            return { success: true };
         }
-    });
-}
-
-function setupMiscHandlers() {
-    ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());
-}
-
-const allHandlerSetups = [
-    setupPdfHandlers,
-    setupSupplierHandlers,
-    setupPartyHandlers,
-    setupSalesRepHandlers,
-    setupMedicineHandlers,
-    setupGroupHandlers,
-    setupInvoiceHandlers,
-    setupExportHandlers,
-    setupSettingsHandlers,
-    setupBackupRestoreHandlers,
-    setupMiscHandlers,
-];
-
-function initializeIpcHandlers() {
-    allHandlerSetups.forEach(setup => setup());
-}
-
-const createWindows = () => {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-    },
+        return { success: false, message: 'Save cancelled.' };
+    } catch (error) {
+        dialog.showErrorBox('Restore Failed', `An error occurred: ${error.message}. Please restart the application.`);
+        app.quit();
+        return { success: false, message: error.message };
+    }
   });
 
-  mainWindow.on('closed', () => {
-    if (db) db.close();
-    app.quit();
-  });
-
-  printWindow = new BrowserWindow({ show: false });
-  
-  const isDev = !app.isPackaged;
-
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
-  } else {
-    mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
-  }
+  ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());
 }
 
 // --- Application Lifecycle ---
-function initializeApp() {
+app.on('ready', () => {
   try {
     db = new DatabaseService();
     initializeIpcHandlers();
-    app.on('ready', createWindows);
+
+    // Start the express server
+    expressApp.listen(PORT, async () => {
+      console.log(`Server running at http://localhost:${PORT}`);
+      // Open the URL in the default browser
+      const { default: open } = await import('open');
+      open(`http://localhost:${PORT}`);
+    });
+
+    // Set the app to launch on startup
+    app.setLoginItemSettings({
+      openAtLogin: true
+    });
+
   } catch(error) {
     console.error("Failed to initialize application:", error);
     dialog.showErrorBox("Application Error", "Could not initialize the application. Please check the logs.");
     app.quit();
   }
-}
-
-// Start the application
-initializeApp();
-
-app.on('window-all-closed', () => {
-  // On non-macOS platforms, quit the app when all windows are closed.
-  if (process.platform !== 'darwin') {
-    if (db) db.close();
-    app.quit();
-  }
 });
 
-app.on('activate', () => {
+// This prevents the app from quitting when all windows are closed,
+// allowing it to run in the background.
+app.on('window-all-closed', (e) => {
+    // Intentionally left blank to keep the app running.
+});
 
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindows();
+app.on('before-quit', () => {
+  if (db) {
+    db.close();
   }
 });
 
