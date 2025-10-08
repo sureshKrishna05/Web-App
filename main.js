@@ -77,6 +77,11 @@ function initializeIpcHandlers() {
         },
         settings
       };
+<<<<<<< HEAD
+=======
+
+      // FIX #1: Removed incorrect destructuring of filePath.
+>>>>>>> parent of 4094b31 (Finalize commit #2)
       const filePath = dialog.showSaveDialogSync({
         title: 'Download Invoice PDF',
         defaultPath: `invoice-${pdfData.invoiceNumber}.pdf`,
@@ -115,6 +120,7 @@ function initializeIpcHandlers() {
             settings
         };
 
+        // FIX #1: Removed incorrect destructuring of filePath here as well.
         const filePath = dialog.showSaveDialogSync({
             title: 'Download Quotation PDF',
             defaultPath: `quotation-${pdfData.quotationNumber}.pdf`,
@@ -187,6 +193,7 @@ function initializeIpcHandlers() {
     }
   });
 
+<<<<<<< HEAD
   ipcMain.handle('export-invoices-xlsx', (event, invoiceIds) => {
     try {
         if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
@@ -203,6 +210,10 @@ function initializeIpcHandlers() {
         return { success: false, message: error.message };
     }
   });
+=======
+            const { filePath } = dialog.showSaveDialogSync({ title: 'Export to CSV', defaultPath: `sales-${Date.now()}.csv` });
+            if (!filePath) return { success: false, message: 'Save cancelled.' };
+>>>>>>> parent of 4094b31 (Finalize commit #2)
 
   ipcMain.handle('get-settings', () => db.getSettings());
   ipcMain.handle('update-settings', (event, settings) => db.updateSettings(settings));
@@ -225,6 +236,7 @@ function initializeIpcHandlers() {
     }
   });
 
+<<<<<<< HEAD
   ipcMain.handle('restore-data', () => {
     try {
         const filePaths = dialog.showOpenDialogSync(null, {
@@ -243,6 +255,85 @@ function initializeIpcHandlers() {
                 message: 'Data has been restored. The application will now restart.'
             });
             app.relaunch();
+=======
+    ipcMain.handle('export-invoices-xlsx', (event, invoiceIds) => {
+        try {
+            if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
+            const records = db.getInvoicesForExport(invoiceIds);
+            if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
+            
+            const { filePath } = dialog.showSaveDialogSync({ title: 'Export to Excel', defaultPath: `sales-${Date.now()}.xlsx` });
+            if (!filePath) return { success: false, message: 'Save cancelled.' };
+            
+            const worksheet = XLSX.utils.json_to_sheet(records);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
+            XLSX.writeFile(workbook, filePath);
+
+            return { success: true, path: filePath };
+        } catch (error) {
+            return { success: false, message: error.message };
+        }
+    });
+}
+
+function setupSettingsHandlers() {
+    ipcMain.handle('get-settings', () => db.getSettings());
+    ipcMain.handle('update-settings', (event, settings) => db.updateSettings(settings));
+}
+
+function setupBackupRestoreHandlers() {
+    ipcMain.handle('backup-data', async () => {
+        try {
+            const { filePath } = await dialog.showSaveDialog({
+                title: 'Backup Database',
+                defaultPath: `backup-${Date.now()}.db`,
+                filters: [{ name: 'Database Files', extensions: ['db'] }]
+            });
+
+            if (filePath) {
+                db.checkpointDb();
+                fs.copyFileSync(db.getDbPath(), filePath);
+                return { success: true, path: filePath };
+            }
+
+            return { success: false, message: 'Backup cancelled.' };
+        } catch (error) {
+            return { success: false, message: error.message };
+        }
+    });
+
+    ipcMain.handle('restore-data', async () => {
+        try {
+            const { filePaths } = await dialog.showOpenDialog({
+                title: 'Restore Database',
+                properties: ['openFile'],
+                filters: [{ name: 'Database Files', extensions: ['db'] }]
+            });
+
+            if (filePaths && filePaths.length > 0) {
+                const backupPath = filePaths[0];
+                const targetPath = db.getDbPath();
+
+                if (db) db.close();
+
+                fs.copyFileSync(backupPath, targetPath);
+
+                dialog.showMessageBoxSync(mainWindow, {
+                    type: 'info',
+                    title: 'Restore Successful',
+                    message: 'Data has been restored. The application will now restart.'
+                });
+                
+                app.relaunch();
+                app.quit();
+
+                return { success: true };
+            }
+            return { success: false, message: 'Restore cancelled.' };
+        } catch (error) {
+            dialog.showErrorBox('Restore Failed', `An error occurred: ${error.message}. Please restart the application.`);
+>>>>>>> parent of 4094b31 (Finalize commit #2)
             app.quit();
             return { success: true };
         }
@@ -254,7 +345,26 @@ function initializeIpcHandlers() {
     }
   });
 
+<<<<<<< HEAD
   ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());
+=======
+  // FIX #2: Ensure the app quits when the main window is closed.
+  mainWindow.on('closed', () => {
+    if (db) db.close();
+    app.quit();
+  });
+
+  printWindow = new BrowserWindow({ show: false });
+  
+  const isDev = !app.isPackaged;
+
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
+  }
+>>>>>>> parent of 4094b31 (Finalize commit #2)
 }
 
 // --- Application Lifecycle ---
@@ -289,9 +399,22 @@ app.on('window-all-closed', (e) => {
     // Intentionally left blank to keep the app running.
 });
 
+<<<<<<< HEAD
 app.on('before-quit', () => {
   if (db) {
     db.close();
+=======
+app.on('window-all-closed', () => {
+  // On non-macOS platforms, quit the app when all windows are closed.
+  if (process.platform !== 'darwin') {
+    if (db) db.close();
+    app.quit();
   }
 });
 
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindows();
+>>>>>>> parent of 4094b31 (Finalize commit #2)
+  }
+});
