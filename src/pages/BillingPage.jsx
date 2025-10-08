@@ -23,35 +23,39 @@ const BillingPage = () => {
     const [totals, setTotals] = useState({ subtotal: 0, tax: 0, finalAmount: 0 });
     const [paymentMode, setPaymentMode] = useState('Credit');
 
-    // --- STATE for keyboard navigation ---
     const [highlightedClientIndex, setHighlightedClientIndex] = useState(-1);
     const [highlightedMedicineIndex, setHighlightedMedicineIndex] = useState(-1);
 
-    // --- REFS for focus management ---
     const clientInputRef = useRef(null);
     const medicineInputRef = useRef(null);
     const ptrInputRef = useRef(null);
     const quantityInputRef = useRef(null);
     const addItemButtonRef = useRef(null);
 
-
     useEffect(() => {
         const fetchInitialData = async () => {
-            const newInvoiceNum = await window.electronAPI.generateInvoiceNumber();
-            setInvoiceNumber(newInvoiceNum);
-            const repsData = await window.electronAPI.getAllSalesReps();
-            setSalesReps(repsData);
+            try {
+                let response = await fetch('/api/invoices/new-number');
+                let data = await response.json();
+                setInvoiceNumber(data.invoiceNumber);
+
+                response = await fetch('/api/sales-reps');
+                data = await response.json();
+                setSalesReps(data);
+            } catch(e) {
+                console.error("Failed to fetch initial data", e);
+            }
         };
         fetchInitialData();
     }, []);
 
-    // --- Client Search and Selection ---
     const handleClientSearch = useCallback(async (query) => {
         setClientSearch(query);
         setSelectedClient(null);
         setHighlightedClientIndex(-1);
         if (query.length > 1) {
-            const results = await window.electronAPI.searchParties(query);
+            const response = await fetch(`/api/parties/search?term=${query}`);
+            const results = await response.json();
             setClientSuggestions(results);
             setIsNewClient(results.length === 0);
         } else {
@@ -66,7 +70,7 @@ const BillingPage = () => {
         setClientSuggestions([]);
         setIsNewClient(false);
         setHighlightedClientIndex(-1);
-        medicineInputRef.current.focus(); // Move focus to medicine input
+        medicineInputRef.current.focus();
     };
 
     const handleSaveNewClient = async () => {
@@ -75,26 +79,27 @@ const BillingPage = () => {
             return;
         }
         try {
-            const newParty = await window.electronAPI.addParty({ 
-                name: clientSearch.trim(), 
-                ...newClientDetails 
+            const response = await fetch('/api/parties', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: clientSearch.trim(), ...newClientDetails })
             });
+            const newParty = await response.json();
             
             if (newParty) {
                 handleSelectClient(newParty);
-                console.log("New client saved successfully:", newParty);
             }
         } catch (error) {
             console.error("Failed to save new client:", error);
         }
     };
     
-    // --- Medicine Search and Selection ---
     const handleMedicineSearch = useCallback(async (query) => {
         setMedicineSearch(query);
         setHighlightedMedicineIndex(-1);
         if (query.length > 1) {
-            const results = await window.electronAPI.searchMedicines(query);
+            const response = await fetch(`/api/medicines/search?term=${query}`);
+            const results = await response.json();
             setMedicineSuggestions(results);
         } else {
             setMedicineSuggestions([]);
@@ -115,7 +120,7 @@ const BillingPage = () => {
         });
         setMedicineSuggestions([]);
         setHighlightedMedicineIndex(-1);
-        ptrInputRef.current.focus(); // Move focus to PTR input
+        ptrInputRef.current.focus();
     };
     
     const handleAddItem = () => {
@@ -129,18 +134,16 @@ const BillingPage = () => {
         };
         setBillItems(prev => [...prev, newItem]);
 
-        // Reset medicine fields for next entry
         setMedicineSearch('');
         setSelectedMedicine(null);
         setItemDetails({ hsn: '', batch_number: '', expiry_date: '', ptr: '', quantity: 1, available_stock: '' });
-        medicineInputRef.current.focus(); // Focus back to medicine input
+        medicineInputRef.current.focus();
     };
 
     const handleRemoveItem = (index) => {
         setBillItems(items => items.filter((_, i) => i !== index));
     };
 
-    // --- KEYDOWN Handlers for Navigation ---
     const handleClientKeyDown = (e) => {
         if (e.key === 'ArrowDown') {
             e.preventDefault();
@@ -152,8 +155,6 @@ const BillingPage = () => {
             e.preventDefault();
             if (highlightedClientIndex > -1) {
                 handleSelectClient(clientSuggestions[highlightedClientIndex]);
-            } else if (isNewClient) {
-                // Potentially trigger save or move to next field if desired
             }
         }
     };
@@ -180,30 +181,26 @@ const BillingPage = () => {
         }
     };
 
-
-    // --- Totals Calculation ---
     useEffect(() => {
         const subtotal = billItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-        
         const totalTax = billItems.reduce((acc, item) => {
             const itemTotal = item.price * item.quantity;
             const taxForItem = itemTotal * ((item.gst_percentage || 0) / 100);
             return acc + taxForItem;
         }, 0);
-
         const finalAmount = Math.round(subtotal + totalTax);
         setTotals({ subtotal, tax: totalTax, finalAmount });
     }, [billItems]);
 
-    // --- Form Actions ---
     const resetForm = async () => {
         setClientSearch(''); 
         setSelectedClient(null); 
         setBillItems([]); 
         setPaymentMode('Credit'); 
         setSelectedRepId('');
-        const newNum = await window.electronAPI.generateInvoiceNumber();
-        setInvoiceNumber(newNum);
+        const response = await fetch('/api/invoices/new-number');
+        const data = await response.json();
+        setInvoiceNumber(data.invoiceNumber);
     };
 
     const handleSaveInvoice = async (status) => {
@@ -226,19 +223,23 @@ const BillingPage = () => {
         };
         
         try {
-            await window.electronAPI.createInvoice(invoiceData);
-            const pdfData = { invoiceNumber, paymentMode, client: selectedClient, billItems, totals };
-            await window.electronAPI.printPDF(pdfData, status === 'Completed' ? 'invoice' : 'quotation');
+            await fetch('/api/invoices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(invoiceData)
+            });
+            // We can't trigger a print dialog from here, but the invoice is saved.
+            // A better UX would be to open the generated PDF in a new tab.
+            alert(`Invoice ${status} saved successfully!`);
             resetForm();
         } catch (error) {
-            console.error("Failed to save or print invoice:", error);
+            console.error("Failed to save invoice:", error);
         }
     };
 
     return (
         <div className="p-0">
             <div className="bg-white rounded-lg p-6">
-                {/* Client and Invoice Details Form */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="relative">
                         <label className="text-sm font-medium">Client</label>
@@ -254,7 +255,6 @@ const BillingPage = () => {
                     <div><label className="text-sm font-medium">Invoice Date</label><input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className="w-full p-2 border rounded"/></div>
                 </div>
 
-                {/* New Client Form */}
                 {isNewClient && (
                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 p-4 border rounded border-blue-200 bg-blue-50 items-end">
                         <div><label className="text-xs">Phone</label><input type="text" placeholder="Phone" value={newClientDetails.phone} onChange={e => setNewClientDetails({...newClientDetails, phone: e.target.value})} className="p-2 border rounded w-full"/></div>
@@ -264,7 +264,6 @@ const BillingPage = () => {
                     </div>
                 )}
                 
-                {/* Item Entry Form */}
                 <div className="grid grid-cols-9 gap-2 items-end p-2 border-t mt-4">
                     <div className="col-span-2 relative"><label className="text-xs">Select Medicine</label><input type="text" ref={medicineInputRef} value={medicineSearch} onChange={e => handleMedicineSearch(e.target.value)} onKeyDown={handleMedicineKeyDown} className="w-full p-2 border rounded"/>
                         {medicineSuggestions.length > 0 && (
@@ -282,7 +281,6 @@ const BillingPage = () => {
                     <div><button ref={addItemButtonRef} onClick={handleAddItem} onKeyDown={(e) => {if (e.key === 'Enter') { e.preventDefault(); handleAddItem(); }}} className="w-full bg-green-500 text-white p-2 rounded">Add</button></div>
                 </div>
 
-                {/* Bill Items Table */}
                 <table className="w-full mt-4 text-sm">
                     <thead><tr className="border-b"><th className="p-1 text-left">MEDICINE</th><th className="p-1 text-left">HSN</th><th className="p-1 text-left">BATCH NO</th><th className="p-1 text-right">QTY</th><th className="p-1 text-right">RATE</th><th className="p-1 text-right">AMOUNT</th><th className="p-1"></th></tr></thead>
                     <tbody>
@@ -292,7 +290,6 @@ const BillingPage = () => {
                     </tbody>
                 </table>
 
-                {/* Footer and Totals */}
                 <div className="flex justify-between items-end mt-4 pt-4 border-t">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -325,4 +322,3 @@ const BillingPage = () => {
 };
 
 export default BillingPage;
-

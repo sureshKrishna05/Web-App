@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AddItemModal from '../components/AddItemModal';
 
-// --- Helper Icon Components ---
 const IconEdit = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.586a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -28,7 +27,8 @@ const ItemsPage = () => {
     const fetchMedicines = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await window.electronAPI.getAllMedicines();
+            const response = await fetch('/api/medicines');
+            const data = await response.json();
             setMedicines(data);
         } catch (err) {
             setError(err.message);
@@ -55,9 +55,17 @@ const ItemsPage = () => {
     const handleSave = async (itemData) => {
         try {
             if (selectedItem) {
-                await window.electronAPI.updateMedicine(selectedItem.id, itemData);
+                await fetch(`/api/medicines/${selectedItem.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(itemData)
+                });
             } else {
-                await window.electronAPI.addMedicine(itemData);
+                await fetch('/api/medicines', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(itemData)
+                });
             }
             fetchMedicines();
             handleCloseModal();
@@ -69,7 +77,7 @@ const ItemsPage = () => {
     const handleDelete = async (id) => {
         if (window.confirm('Are you sure you want to delete this item?')) {
             try {
-                await window.electronAPI.deleteMedicine(id);
+                await fetch(`/api/medicines/${id}`, { method: 'DELETE' });
                 fetchMedicines();
             } catch (err) {
                 console.error('Failed to delete item:', err);

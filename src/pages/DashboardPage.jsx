@@ -5,7 +5,6 @@ const IconMedicine = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-
 const IconWarning = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>;
 const IconInvoice = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
 
-// --- Reusable Stat Card Component (Now Clickable) ---
 const StatCard = ({ title, value, icon, colorClass, onClick }) => (
     <button onClick={onClick} className={`w-full text-left bg-white p-6 rounded-lg shadow-md flex items-center ${colorClass} transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}>
         <div className="p-4 rounded-full bg-white bg-opacity-30">
@@ -20,16 +19,18 @@ const StatCard = ({ title, value, icon, colorClass, onClick }) => (
 
 
 const DashboardPage = ({ setActivePage }) => {
-    // --- STATE MANAGEMENT ---
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // --- DATA FETCHING ---
     const fetchStats = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await window.electronAPI.getDashboardStats();
+            const response = await fetch('/api/dashboard-stats');
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            const data = await response.json();
             setStats(data);
         } catch (err) {
             setError(err.message);
@@ -39,12 +40,10 @@ const DashboardPage = ({ setActivePage }) => {
         }
     }, []);
 
-    // Fetch stats when the component mounts
     useEffect(() => {
         fetchStats();
     }, [fetchStats]);
 
-    // --- RENDER LOGIC ---
     if (loading) {
         return <div className="text-center p-8">Loading dashboard...</div>;
     }
@@ -55,7 +54,6 @@ const DashboardPage = ({ setActivePage }) => {
 
     return (
         <div className="p-4 space-y-8">
-            {/* --- Top Statistics Cards --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard 
                     title="Total Items" 
@@ -80,7 +78,6 @@ const DashboardPage = ({ setActivePage }) => {
                 />
             </div>
 
-            {/* --- Recently Added Items Section --- */}
             <div className="bg-white shadow-md rounded-lg p-6">
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">Recently Added Medicines</h2>
                 <div className="overflow-x-auto">
@@ -115,4 +112,3 @@ const DashboardPage = ({ setActivePage }) => {
 };
 
 export default DashboardPage;
-

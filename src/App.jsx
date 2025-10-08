@@ -43,7 +43,6 @@ const Sidebar = ({ activePage, setActivePage, settings }) => {
     useEffect(() => { if (isCollapsed) setOpenSubmenus({}); }, [isCollapsed]);
     const handleToggleSubmenu = (menuName) => { if (!isCollapsed) setOpenSubmenus(prev => ({ ...prev, [menuName]: !prev[menuName] })); };
     
-    // Extract the first part of the address to display as a subtitle
     const addressSubtitle = settings?.address?.split('\n')[0] || 'Application';
 
     return (
@@ -110,8 +109,9 @@ export default function App() {
 
     const fetchSettings = useCallback(async () => {
         try {
-            const data = await window.electronAPI.getSettings();
-            if (data) {
+            const response = await fetch('/api/settings');
+            if(response.ok) {
+                const data = await response.json();
                 setSettings(data);
             }
         } catch (err) {
@@ -130,4 +130,3 @@ export default function App() {
         </div>
     );
 }
-

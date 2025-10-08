@@ -79,7 +79,8 @@ const PartiesPage = () => {
     const fetchParties = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await window.electronAPI.getAllParties();
+            const response = await fetch('/api/parties');
+            const data = await response.json();
             setParties(data);
         } catch (err) {
             setError(err.message);
@@ -104,11 +105,15 @@ const PartiesPage = () => {
 
     const handleSave = async (partyData) => {
         try {
-            if (selectedParty) {
-                await window.electronAPI.updateParty(selectedParty.id, partyData);
-            } else {
-                await window.electronAPI.addParty(partyData);
-            }
+            const url = selectedParty ? `/api/parties/${selectedParty.id}` : '/api/parties';
+            const method = selectedParty ? 'PUT' : 'POST';
+
+            await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(partyData)
+            });
+
             fetchParties();
             handleCloseModal();
         } catch (err) {
@@ -117,13 +122,13 @@ const PartiesPage = () => {
     };
 
     const handleDelete = async (id) => {
-        // Using console.log for a non-blocking confirmation
-        console.log(`Are you sure you want to delete client ID ${id}? This action cannot be undone.`);
-        try {
-            await window.electronAPI.deleteParty(id);
-            fetchParties();
-        } catch (err) {
-            console.error("Failed to delete party:", err);
+        if (window.confirm('Are you sure you want to delete this client?')) {
+            try {
+                await fetch(`/api/parties/${id}`, { method: 'DELETE' });
+                fetchParties();
+            } catch (err) {
+                console.error("Failed to delete party:", err);
+            }
         }
     };
 

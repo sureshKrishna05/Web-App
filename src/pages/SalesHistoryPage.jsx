@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import ExportModal from '../components/ExportModal'; // We will keep this for bulk exports
+import ExportModal from '../components/ExportModal';
 
 const SalesHistoryPage = () => {
     const [invoices, setInvoices] = useState([]);
@@ -15,12 +15,15 @@ const SalesHistoryPage = () => {
     const [error, setError] = useState(null);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-    // Fetch clients and reps for filter dropdowns
     useEffect(() => {
         const fetchFiltersData = async () => {
             try {
-                const clientsData = await window.electronAPI.getAllParties();
-                const repsData = await window.electronAPI.getAllSalesReps();
+                const [clientsRes, repsRes] = await Promise.all([
+                    fetch('/api/parties'),
+                    fetch('/api/sales-reps')
+                ]);
+                const clientsData = await clientsRes.json();
+                const repsData = await repsRes.json();
                 setClients(clientsData);
                 setReps(repsData);
             } catch (err) {
@@ -33,7 +36,12 @@ const SalesHistoryPage = () => {
     const fetchInvoices = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await window.electronAPI.getFilteredInvoices(filters);
+            const response = await fetch('/api/invoices/filtered', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filters)
+            });
+            const data = await response.json();
             setInvoices(data);
         } catch (err) {
             setError(err.message);
@@ -51,47 +59,45 @@ const SalesHistoryPage = () => {
         setFilters(prev => ({ ...prev, [name]: value }));
     };
     
-    // Handler for the main "Export" button (CSV/XLSX)
-    const handleExport = async (format) => {
+    const handleExport = (format) => {
         setIsExportModalOpen(false);
-        const invoiceIds = invoices.map(inv => inv.id);
-
-        if (invoiceIds.length === 0) {
-            console.error("No invoices to export.");
-            return;
-        }
-
-        try {
-            let result;
-            if (format === 'csv') {
-                result = await window.electronAPI.exportInvoicesToCSV(invoiceIds);
-            } else if (format === 'xlsx') {
-                result = await window.electronAPI.exportInvoicesToXLSX(invoiceIds);
-            }
-
-            if (result && result.success) {
-                console.log(`Successfully exported to ${result.path}`);
-            } else if (result) {
-                console.error('Export failed:', result.message);
-            }
-        } catch (err) {
-            console.error('An error occurred during export:', err);
-        }
+        console.log(`Exporting to ${format}...`);
+        // This functionality would need a backend endpoint similar to PDF download.
     };
 
-    // Handler for the individual "Download" button (PDF)
     const handleDownload = async (invoiceId) => {
         try {
-            const result = await window.electronAPI.downloadInvoicePDF(invoiceId);
-            if (result.success) {
-                console.log(`Invoice PDF saved to: ${result.path}`);
+            const response = await fetch('/api/download-invoice-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ invoiceId })
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                const contentDisposition = response.headers.get('content-disposition');
+                let filename = `invoice-${invoiceId}.pdf`;
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                    if (filenameMatch.length === 2)
+                        filename = filenameMatch[1];
+                }
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
             } else {
-                console.error('Failed to download invoice:', result.message);
+                throw new Error('Failed to download PDF');
             }
         } catch (err) {
             console.error('An error occurred during download:', err);
         }
     };
+
 
     return (
         <div className="p-6 bg-[#E9E9E9] h-full">
@@ -175,4 +181,3 @@ const SalesHistoryPage = () => {
 };
 
 export default SalesHistoryPage;
-

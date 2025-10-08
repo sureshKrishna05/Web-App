@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AddGroupModal from '../components/AddGroupModal';
 import GroupModal from '../components/GroupModal';
 
-// --- Helper Icon Components ---
 const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>;
 const IconDelete = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
 
@@ -17,7 +16,8 @@ const GroupsPage = () => {
     const fetchGroups = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await window.electronAPI.getAllGroups();
+            const response = await fetch('/api/groups');
+            const data = await response.json();
             setGroups(Array.isArray(data) ? data : []);
         } catch (err) {
             setError(err?.message || 'Failed to load groups');
@@ -32,28 +32,31 @@ const GroupsPage = () => {
 
     const handleCreateGroup = async (groupData) => {
         try {
-            await window.electronAPI.addGroup(groupData);
+            await fetch('/api/groups', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(groupData)
+            });
             setIsAddModalOpen(false);
             fetchGroups();
         } catch (err) {
             console.error('Failed to add group:', err);
-            // Non-blocking error feedback
         }
     };
     
     const handleDeleteGroup = async (id) => {
         try {
-            await window.electronAPI.deleteGroup(id);
+            await fetch(`/api/groups/${id}`, { method: 'DELETE' });
             fetchGroups();
         } catch (err) {
             console.error('Failed to delete group:', err);
-            // Non-blocking error feedback
         }
     };
 
     const handleOpenDetailsModal = async (group) => {
         try {
-            const details = await window.electronAPI.getGroupDetails(group.id);
+            const response = await fetch(`/api/groups/${group.id}`);
+            const details = await response.json();
             setSelectedGroupDetails(details);
             setIsDetailsModalOpen(true);
         } catch (err) {
@@ -68,9 +71,13 @@ const GroupsPage = () => {
 
     const handleSaveGstInModal = async (groupId, newGst) => {
         try {
-            await window.electronAPI.updateGroupGst({ id: groupId, gst_percentage: newGst });
+            await fetch(`/api/groups/${groupId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ gst_percentage: newGst })
+            });
             handleCloseDetailsModal();
-            fetchGroups(); // Refresh the main group list to show updated GST
+            fetchGroups();
         } catch (err) {
             console.error('Failed to update GST from modal:', err);
         }
@@ -128,4 +135,3 @@ const GroupsPage = () => {
 };
 
 export default GroupsPage;
-
