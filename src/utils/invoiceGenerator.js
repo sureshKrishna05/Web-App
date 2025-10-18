@@ -2,10 +2,10 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const { toWords } = require('number-to-words');
 
-function createInvoice(invoice, path) {
+function createInvoice(invoice, stream) {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
 
-    doc.pipe(fs.createWriteStream(path));
+    doc.pipe(stream);
 
     const settings = invoice.settings || {};
 
@@ -104,10 +104,10 @@ function createInvoice(invoice, path) {
     doc.end();
 }
 
-function createQuotation(quotation, path) {
+function createQuotation(quotation, stream) {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
 
-    doc.pipe(fs.createWriteStream(path));
+    doc.pipe(stream);
     
     const settings = quotation.settings || {};
 
@@ -170,4 +170,3 @@ function createQuotation(quotation, path) {
 
 
 module.exports = { createInvoice, createQuotation };
-
