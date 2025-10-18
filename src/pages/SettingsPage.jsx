@@ -45,7 +45,8 @@ const SettingsPage = ({ onSettingsUpdate }) => {
     const fetchSettings = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await window.electronAPI.getSettings();
+            const response = await fetch('/api/settings');
+            const data = await response.json();
             if (data) {
                 setSettings(data);
             }
@@ -69,7 +70,11 @@ const SettingsPage = ({ onSettingsUpdate }) => {
     const handleSaveSettings = async (e) => {
         e.preventDefault();
         try {
-            await window.electronAPI.updateSettings(settings);
+            await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            });
             showNotification("Settings saved successfully!", "success");
             if (onSettingsUpdate) {
                 onSettingsUpdate(); // Notify parent component to re-fetch settings
@@ -81,21 +86,13 @@ const SettingsPage = ({ onSettingsUpdate }) => {
     };
     
     const handleBackup = async () => {
-        const result = await window.electronAPI.backupData();
-        if (result.success) {
-            showNotification(`Data successfully backed up to ${result.path}`, 'success');
-        } else {
-            showNotification(`Backup failed: ${result.message}`, 'error');
-        }
+        // This needs a backend implementation
+        showNotification('Backup functionality is not available in the web version.', 'info');
     };
     
     const handleRestore = async () => {
-        const result = await window.electronAPI.restoreData();
-        if (result.success) {
-            showNotification('Data restore initiated. The app will now restart.', 'success');
-        } else {
-             showNotification(`Restore failed: ${result.message}`, 'error');
-        }
+        // This needs a backend implementation
+        showNotification('Restore functionality is not available in the web version.', 'info');
     };
 
     const renderContent = () => {
@@ -195,4 +192,3 @@ const SettingsPage = ({ onSettingsUpdate }) => {
 };
 
 export default SettingsPage;
-

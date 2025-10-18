@@ -1,297 +1,389 @@
-const { app, ipcMain, dialog, Menu } = require('electron');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const XLSX = require('xlsx');
 const express = require('express');
-
-// --- START: CORRECTED REQUIRE STATEMENTS ---
+const path = require('path');
 const DatabaseService = require('./src/database/database.js');
 const { createInvoice, createQuotation } = require('./src/utils/invoiceGenerator.js');
-// --- END: CORRECTED REQUIRE STATEMENTS ---
+const fs = require('fs');
 
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (require('electron-squirrel-startup')) {
-  app.quit();
+const app = express();
+const PORT = 3300;
+const db = new DatabaseService();
+
+app.use(express.json());
+
+// Only serve static files from the 'dist' directory in production
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, 'dist')));
 }
 
-// --- Global Variables ---
-let db;
-const expressApp = express();
-const PORT = 3300;
 
-// --- Server Setup ---
-// Serve the React build files from the 'dist' directory
-expressApp.use(express.static(path.join(__dirname, 'dist')));
+// --- API Routes ---
 
-
-// --- IPC Handlers Setup ---
-// This function initializes all the backend API endpoints your React app can call.
-function initializeIpcHandlers() {
-  if (!db) return;
-
-  // --- PDF & Document Handlers ---
-  // Note: Printing is now handled by saving the file, which the user can then print from their browser.
-  ipcMain.handle('print-pdf', async (event, pdfData, type = 'invoice') => {
-    const settings = db.getSettings();
-    const fullPdfData = { ...pdfData, settings };
-    const filePath = dialog.showSaveDialogSync({
-        title: `Save ${type}`,
-        defaultPath: `${type}-${Date.now()}.pdf`,
-        filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
-    });
-
-    if (filePath) {
-        if (type === 'invoice') {
-            createInvoice(fullPdfData, filePath);
-        } else {
-            createQuotation(fullPdfData, filePath);
-        }
-        return { success: true, path: filePath };
-    }
-    return { success: false, message: 'Save cancelled.' };
-  });
-
-  ipcMain.handle('download-invoice-pdf', (event, invoiceId) => {
+// Dashboard
+app.get('/api/dashboard-stats', (req, res) => {
     try {
-      const invoiceDetails = db.getInvoiceDetails(invoiceId);
-      if (!invoiceDetails) {
-        throw new Error('Invoice not found.');
-      }
-      const clientForPdf = {
-          name: invoiceDetails.client_name,
-          address: invoiceDetails.client_address,
-          phone: invoiceDetails.client_phone,
-          gstin: invoiceDetails.client_gstin
-      };
-      const settings = db.getSettings();
-      const pdfData = {
-        invoiceNumber: invoiceDetails.invoice_number,
-        paymentMode: invoiceDetails.payment_mode || 'N/A',
-        client: clientForPdf,
-        billItems: invoiceDetails.items.map(item => ({ ...item, name: item.medicine_name, price: item.unit_price })),
-        totals: {
-          subtotal: invoiceDetails.total_amount,
-          tax: invoiceDetails.tax,
-          finalAmount: invoiceDetails.final_amount
-        },
-        settings
-      };
-      const filePath = dialog.showSaveDialogSync({
-        title: 'Download Invoice PDF',
-        defaultPath: `invoice-${pdfData.invoiceNumber}.pdf`,
-        filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
-      });
-      if (filePath) {
-        createInvoice(pdfData, filePath);
-        return { success: true, path: filePath };
-      }
-      return { success: false, message: 'Save cancelled.' };
+        const stats = db.getDashboardStats();
+        res.json(stats);
     } catch (error) {
-      console.error('Failed to download invoice PDF:', error);
-      return { success: false, message: error.message };
+        res.status(500).json({ error: error.message });
     }
-  });
-  
-  ipcMain.handle('download-quotation-pdf', (event, quotationId) => {
+});
+
+// Medicines
+app.get('/api/medicines', (req, res) => {
     try {
-        const quotationDetails = db.getQuotationDetails(quotationId);
-        if (!quotationDetails) return { success: false, message: 'Quotation not found.' };
+        const medicines = db.getAllMedicines();
+        res.json(medicines);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
-        const clientDetails = db.getPartyById(quotationDetails.client_id);
-        if (!clientDetails) return { success: false, message: 'Client details not found.' };
-        
+app.get('/api/medicines/search', (req, res) => {
+    try {
+        const medicines = db.searchMedicines(req.query.term);
+        res.json(medicines);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/medicines', (req, res) => {
+    try {
+        const newMedicine = db.addMedicine(req.body);
+        res.status(201).json(newMedicine);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/medicines/:id', (req, res) => {
+    try {
+        const updated = db.updateMedicine(req.params.id, req.body);
+        if (updated) {
+            res.json({ message: 'Medicine updated successfully' });
+        } else {
+            res.status(404).json({ error: 'Medicine not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/medicines/:id', (req, res) => {
+    try {
+        const deleted = db.deleteMedicine(req.params.id);
+        if (deleted) {
+            res.json({ message: 'Medicine deleted successfully' });
+        } else {
+            res.status(404).json({ error: 'Medicine not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Parties (Clients)
+app.get('/api/parties', (req, res) => {
+    try {
+        const parties = db.getAllParties();
+        res.json(parties);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/parties/search', (req, res) => {
+    try {
+        const parties = db.searchParties(req.query.term);
+        res.json(parties);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+app.post('/api/parties', (req, res) => {
+    try {
+        const newParty = db.addParty(req.body);
+        res.status(201).json(newParty);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/parties/:id', (req, res) => {
+    try {
+        const updated = db.updateParty(req.params.id, req.body);
+        if (updated) {
+            res.json({ message: 'Party updated successfully' });
+        } else {
+            res.status(404).json({ error: 'Party not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/parties/:id', (req, res) => {
+    try {
+        const deleted = db.deleteParty(req.params.id);
+        if (deleted) {
+            res.json({ message: 'Party deleted successfully' });
+        } else {
+            res.status(404).json({ error: 'Party not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Invoices
+app.get('/api/invoices/new-number', (req, res) => {
+    try {
+        const invoiceNumber = db.generateInvoiceNumber();
+        res.json({ invoiceNumber });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/invoices/filtered', (req, res) => {
+    try {
+        const invoices = db.getFilteredInvoices(req.body);
+        res.json(invoices);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/invoices', (req, res) => {
+    try {
+        const invoiceId = db.createInvoice(req.body);
+        res.status(201).json({ invoiceId });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+// Sales Reps
+app.get('/api/sales-reps', (req, res) => {
+    try {
+        const reps = db.getAllSalesReps();
+        res.json(reps);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/sales-reps', (req, res) => {
+    try {
+        const newRep = db.addSalesRep(req.body);
+        res.status(201).json(newRep);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/sales-reps/:id', (req, res) => {
+    try {
+        const deleted = db.deleteSalesRep(req.params.id);
+        if (deleted) {
+            res.json({ message: 'Sales rep deleted successfully' });
+        } else {
+            res.status(404).json({ error: 'Sales rep not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+// Groups
+app.get('/api/groups', (req, res) => {
+    try {
+        const groups = db.getAllGroups();
+        res.json(groups);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/groups/:id', (req, res) => {
+    try {
+        const group = db.getGroupDetails(req.params.id);
+        if (group) {
+            res.json(group);
+        } else {
+            res.status(404).json({ error: 'Group not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/groups', (req, res) => {
+    try {
+        const newGroup = db.addGroup(req.body);
+        res.status(201).json(newGroup);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/groups/:id', (req, res) => {
+    try {
+        const updated = db.updateGroupGst(req.params.id, req.body.gst_percentage);
+        if (updated) {
+            res.json({ message: 'Group updated successfully' });
+        } else {
+            res.status(404).json({ error: 'Group not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/groups/:id', (req, res) => {
+    try {
+        const deleted = db.deleteGroup(req.params.id);
+        if (deleted) {
+            res.json({ message: 'Group deleted successfully' });
+        } else {
+            res.status(404).json({ error: 'Group not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Suppliers
+app.get('/api/suppliers', (req, res) => {
+    try {
+        const suppliers = db.getAllSuppliers();
+        res.json(suppliers);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/suppliers', (req, res) => {
+    try {
+        const newSupplier = db.addSupplier(req.body);
+        res.status(201).json(newSupplier);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/suppliers/:id', (req, res) => {
+    try {
+        const updated = db.updateSupplier(req.params.id, req.body);
+        if (updated) {
+            res.json({ message: 'Supplier updated successfully' });
+        } else {
+            res.status(404).json({ error: 'Supplier not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/suppliers/:id', (req, res) => {
+    try {
+        const deleted = db.deleteSupplier(req.params.id);
+        if (deleted) {
+            res.json({ message: 'Supplier deleted successfully' });
+        } else {
+            res.status(404).json({ error: 'Supplier not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+
+// Settings
+app.get('/api/settings', (req, res) => {
+    try {
         const settings = db.getSettings();
+        res.json(settings);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
+app.post('/api/settings', (req, res) => {
+    try {
+        db.updateSettings(req.body);
+        res.json({ message: 'Settings updated successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+// PDF Download
+app.post('/api/download-invoice-pdf', (req, res) => {
+    try {
+        const { invoiceId } = req.body;
+        const invoiceDetails = db.getInvoiceDetails(invoiceId);
+        if (!invoiceDetails) {
+            return res.status(404).json({ error: 'Invoice not found.' });
+        }
+
+        const clientForPdf = {
+            name: invoiceDetails.client_name,
+            address: invoiceDetails.client_address,
+            phone: invoiceDetails.client_phone,
+            gstin: invoiceDetails.client_gstin
+        };
+        const settings = db.getSettings();
         const pdfData = {
-            quotationNumber: quotationDetails.quotation_number,
-            client: clientDetails,
-            billItems: quotationDetails.items.map(item => ({ ...item, name: item.medicine_name, price: item.unit_price })),
+            invoiceNumber: invoiceDetails.invoice_number,
+            paymentMode: invoiceDetails.payment_mode || 'N/A',
+            client: clientForPdf,
+            billItems: invoiceDetails.items.map(item => ({ ...item, name: item.medicine_name, price: item.unit_price })),
             totals: {
-                subtotal: quotationDetails.total_amount,
-                tax: quotationDetails.tax,
-                finalAmount: quotationDetails.final_amount
+                subtotal: invoiceDetails.total_amount,
+                tax: invoiceDetails.tax,
+                finalAmount: invoiceDetails.final_amount
             },
             settings
         };
 
-        // FIX #1: Removed incorrect destructuring of filePath here as well.
-        const filePath = dialog.showSaveDialogSync({
-            title: 'Download Quotation PDF',
-            defaultPath: `quotation-${pdfData.quotationNumber}.pdf`,
-            filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
-        });
+        const tempFilePath = path.join(__dirname, `invoice-${pdfData.invoiceNumber}.pdf`);
+        const stream = fs.createWriteStream(tempFilePath);
+        createInvoice(pdfData, stream);
 
-        if (filePath) {
-            createQuotation(pdfData, filePath);
-            return { success: true, path: filePath };
-        }
-        return { success: false, message: 'Save cancelled.' };
-    } catch (error) {
-        console.error('Failed to download quotation PDF:', error);
-        return { success: false, message: error.message };
-    }
-  });
-
-  // --- Data Handlers (Suppliers, Parties, etc.) ---
-  // These remain largely the same as they are backend logic.
-  ipcMain.handle('get-all-suppliers', () => db.getAllSuppliers());
-  ipcMain.handle('add-supplier', (event, supplier) => db.addSupplier(supplier));
-  ipcMain.handle('update-supplier', (event, id, supplier) => db.updateSupplier(id, supplier));
-  ipcMain.handle('delete-supplier', (event, id) => db.deleteSupplier(id));
-
-  ipcMain.handle('get-all-parties', () => db.getAllParties());
-  ipcMain.handle('get-party-by-id', (event, id) => db.getPartyById(id));
-  ipcMain.handle('add-party', (event, party) => db.addParty(party));
-  ipcMain.handle('update-party', (event, id, party) => db.updateParty(id, party));
-  ipcMain.handle('delete-party', (event, id) => db.deleteParty(id));
-  ipcMain.handle('search-parties', (event, searchTerm) => db.searchParties(searchTerm));
-  ipcMain.handle('get-party-by-name', (event, name) => db.getPartyByName(name));
-
-  ipcMain.handle('get-all-sales-reps', () => db.getAllSalesReps());
-  ipcMain.handle('add-sales-rep', (event, employeeData) => db.addSalesRep(employeeData));
-  ipcMain.handle('delete-sales-rep', (event, id) => db.deleteSalesRep(id));
-  ipcMain.handle('get-rep-performance', (event, { repId, month }) => db.getRepPerformance(repId, month));
-  ipcMain.handle('set-rep-target', (event, { repId, month, targetAmount }) => db.setRepTarget(repId, month, targetAmount));
-
-  ipcMain.handle('get-all-medicines', () => db.getAllMedicines());
-  ipcMain.handle('search-medicines', (event, searchTerm) => db.searchMedicines(searchTerm));
-  ipcMain.handle('add-medicine', (event, medicine) => db.addMedicine(medicine));
-  ipcMain.handle('update-medicine', (event, id, medicine) => db.updateMedicine(id, medicine));
-  ipcMain.handle('delete-medicine', (event, id) => db.deleteMedicine(id));
-
-  ipcMain.handle('get-all-groups', () => db.getAllGroups());
-  ipcMain.handle('get-group-details', (event, id) => db.getGroupDetails(id));
-  ipcMain.handle('add-group', (event, group) => db.addGroup(group));
-  ipcMain.handle('update-group-gst', (event, { id, gst_percentage }) => db.updateGroupGst(id, gst_percentage));
-  ipcMain.handle('delete-group', (event, id) => db.deleteGroup(id));
-
-  ipcMain.handle('create-invoice', (event, invoiceData) => db.createInvoice(invoiceData));
-  ipcMain.handle('get-filtered-invoices', (event, filters) => db.getFilteredInvoices(filters));
-  ipcMain.handle('get-invoice-details', (event, invoiceId) => db.getInvoiceDetails(invoiceId));
-  ipcMain.handle('generate-invoice-number', () => db.generateInvoiceNumber());
-
-  ipcMain.handle('export-invoices-csv', (event, invoiceIds) => {
-    try {
-        if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
-        const records = db.getInvoicesForExport(invoiceIds);
-        if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
-        const filePath = dialog.showSaveDialogSync({ title: 'Export to CSV', defaultPath: `sales-${Date.now()}.csv` });
-        if (!filePath) return { success: false, message: 'Save cancelled.' };
-        const worksheet = XLSX.utils.json_to_sheet(records);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
-        XLSX.writeFile(workbook, filePath, { bookType: 'csv' });
-        return { success: true, path: filePath };
-    } catch (error) {
-        return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle('export-invoices-xlsx', (event, invoiceIds) => {
-    try {
-        if (!invoiceIds || invoiceIds.length === 0) return { success: false, message: 'No invoices selected.' };
-        const records = db.getInvoicesForExport(invoiceIds);
-        if (!records || records.length === 0) return { success: false, message: 'No data for selected invoices.' };
-        const filePath = dialog.showSaveDialogSync({ title: 'Export to Excel', defaultPath: `sales-${Date.now()}.xlsx` });
-        if (!filePath) return { success: false, message: 'Save cancelled.' };
-        const worksheet = XLSX.utils.json_to_sheet(records);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
-        XLSX.writeFile(workbook, filePath);
-        return { success: true, path: filePath };
-    } catch (error) {
-        return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle('get-settings', () => db.getSettings());
-  ipcMain.handle('update-settings', (event, settings) => db.updateSettings(settings));
-
-  ipcMain.handle('backup-data', () => {
-    try {
-        const filePath = dialog.showSaveDialogSync(null, {
-            title: 'Backup Database',
-            defaultPath: `backup-${Date.now()}.db`,
-            filters: [{ name: 'Database Files', extensions: ['db'] }]
-        });
-        if (filePath) {
-            db.checkpointDb();
-            fs.copyFileSync(db.getDbPath(), filePath);
-            return { success: true, path: filePath };
-        }
-        return { success: false, message: 'Backup cancelled.' };
-    } catch (error) {
-        return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle('restore-data', () => {
-    try {
-        const filePaths = dialog.showOpenDialogSync(null, {
-            title: 'Restore Database',
-            properties: ['openFile'],
-            filters: [{ name: 'Database Files', extensions: ['db'] }]
-        });
-        if (filePaths && filePaths.length > 0) {
-            const backupPath = filePaths[0];
-            const targetPath = db.getDbPath();
-            if (db) db.close();
-            fs.copyFileSync(backupPath, targetPath);
-            dialog.showMessageBoxSync(null, {
-                type: 'info',
-                title: 'Restore Successful',
-                message: 'Data has been restored. The application will now restart.'
+        stream.on('finish', () => {
+            res.download(tempFilePath, `invoice-${pdfData.invoiceNumber}.pdf`, (err) => {
+                if (err) {
+                    console.error('Error sending file:', err);
+                }
+                // Clean up the temporary file
+                fs.unlink(tempFilePath, (unlinkErr) => {
+                    if (unlinkErr) console.error('Error deleting temp file:', unlinkErr);
+                });
             });
-            app.relaunch();
-            app.quit();
-            return { success: true };
-        }
-        return { success: false, message: 'Save cancelled.' };
-    } catch (error) {
-        dialog.showErrorBox('Restore Failed', `An error occurred: ${error.message}. Please restart the application.`);
-        app.quit();
-        return { success: false, message: error.message };
-    }
-  });
+        });
 
-  ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());
+    } catch (error) {
+        console.error('Failed to download invoice PDF:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+// In production, serve the React app for all other requests
+if (process.env.NODE_ENV === 'production') {
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    });
 }
 
-// --- Application Lifecycle ---
-app.on('ready', () => {
-  try {
-    db = new DatabaseService();
-    initializeIpcHandlers();
 
-    // Start the express server
-    expressApp.listen(PORT, async () => {
-      console.log(`Server running at http://localhost:${PORT}`);
-      // Open the URL in the default browser
-      const { default: open } = await import('open');
-      open(`http://localhost:${PORT}`);
-    });
-
-    // Set the app to launch on startup
-    app.setLoginItemSettings({
-      openAtLogin: true
-    });
-
-  } catch(error) {
-    console.error("Failed to initialize application:", error);
-    dialog.showErrorBox("Application Error", "Could not initialize the application. Please check the logs.");
-    app.quit();
-  }
-});
-
-// This prevents the app from quitting when all windows are closed,
-// allowing it to run in the background.
-app.on('window-all-closed', (e) => {
-    // Intentionally left blank to keep the app running.
-});
-
-app.on('before-quit', () => {
-  if (db) {
-    db.close();
-  }
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
 });

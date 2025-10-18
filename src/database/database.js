@@ -1,13 +1,15 @@
-
 const path = require('path');
-const { app } = require('electron');
-const isDev = !app.isPackaged;
+// REMOVED: const { app } = require('electron'); 
 const Database = require('better-sqlite3');
 
 class DatabaseService {
     constructor() {
-        const userDataPath = app.getPath('userData');
-        this.dbPath = path.join(userDataPath, 'pharmacy.db'); // Store path for backup/restore
+        // Corrected: Store the database in a 'data' folder within your project
+        const dbDir = path.join(__dirname, '..', '..', 'data');
+        if (!require('fs').existsSync(dbDir)) {
+            require('fs').mkdirSync(dbDir);
+        }
+        this.dbPath = path.join(dbDir, 'pharmacy.db');
         this.db = new Database(this.dbPath);
         this.db.pragma('journal_mode = WAL');
         this.db.pragma('foreign_keys = ON');

@@ -14,7 +14,8 @@ const ManageEmployeesPage = () => {
     const fetchSalesReps = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await window.electronAPI.getAllSalesReps();
+            const response = await fetch('/api/sales-reps');
+            const data = await response.json();
             setReps(data);
         } catch (err) {
             setError(err.message);
@@ -29,7 +30,11 @@ const ManageEmployeesPage = () => {
 
     const handleSaveEmployee = async (employeeData) => {
         try {
-            await window.electronAPI.addSalesRep(employeeData);
+            await fetch('/api/sales-reps', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(employeeData)
+            });
             fetchSalesReps();
             setIsModalOpen(false);
         } catch (err) {
@@ -39,12 +44,13 @@ const ManageEmployeesPage = () => {
     };
 
     const handleDeleteRep = async (id) => {
-        console.log(`Are you sure you want to delete employee ID ${id}?`);
-        try {
-            await window.electronAPI.deleteSalesRep(id);
-            fetchSalesReps();
-        } catch (err) {
-            setError(err.message);
+        if (window.confirm(`Are you sure you want to delete employee ID ${id}?`)) {
+            try {
+                await fetch(`/api/sales-reps/${id}`, { method: 'DELETE' });
+                fetchSalesReps();
+            } catch (err) {
+                setError(err.message);
+            }
         }
     };
 

@@ -46,13 +46,17 @@ const EmployeesPage = () => {
     const fetchData = useCallback(async (month) => {
         try {
             setLoading(true);
-            const salesReps = await window.electronAPI.getAllSalesReps();
+            // Fetch sales reps from the API
+            const repsResponse = await fetch('/api/sales-reps');
+            const salesReps = await repsResponse.json();
             setReps(salesReps);
 
+            // Fetch performance data for each rep
             const performance = {};
             for (const rep of salesReps) {
-                // Pass arguments as a single object
-                performance[rep.id] = await window.electronAPI.getRepPerformance({ repId: rep.id, month: month });
+                // This logic needs to be adapted to a new API endpoint if you want to keep it
+                // For now, we'll just initialize it.
+                performance[rep.id] = { target: 0, achieved: 0 };
             }
             setPerformanceData(performance);
         } catch (error) {
@@ -77,19 +81,11 @@ const EmployeesPage = () => {
 
     const handleSaveTarget = async (targetAmount) => {
         if (!selectedRep || !targetAmount) return;
-        try {
-            // Pass arguments as a single object
-            await window.electronAPI.setRepTarget({ 
-                repId: selectedRep.id, 
-                month: selectedMonth, 
-                targetAmount: Number(targetAmount) 
-            });
-            setIsModalOpen(false);
-            setSelectedRep(null);
-            fetchData(selectedMonth); // Refresh data
-        } catch (error) {
-            console.error("Failed to set target:", error);
-        }
+        // This will need a new backend endpoint to save the target
+        console.log(`Saving target for ${selectedRep.name}: ${targetAmount}`);
+        setIsModalOpen(false);
+        setSelectedRep(null);
+        fetchData(selectedMonth); // Refresh data
     };
 
     return (

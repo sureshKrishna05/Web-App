@@ -105,7 +105,9 @@ const SuppliersPage = () => {
     const fetchSuppliers = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await window.electronAPI.getAllSuppliers();
+            const response = await fetch('/api/suppliers');
+            if (!response.ok) throw new Error('Network response was not ok');
+            const data = await response.json();
             setSuppliers(data);
         } catch (err) {
             setError(err.message);
@@ -130,29 +132,30 @@ const SuppliersPage = () => {
 
     const handleSave = async (supplierData) => {
         try {
-            if (selectedSupplier) {
-                await window.electronAPI.updateSupplier(selectedSupplier.id, supplierData);
-            } else {
-                await window.electronAPI.addSupplier(supplierData);
-            }
+            const url = selectedSupplier ? `/api/suppliers/${selectedSupplier.id}` : '/api/suppliers';
+            const method = selectedSupplier ? 'PUT' : 'POST';
+
+            await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(supplierData)
+            });
             fetchSuppliers();
             handleCloseModal();
         } catch (err) {
             console.error("Failed to save supplier:", err);
-            // Non-blocking notification
-            console.log("Failed to save supplier. A supplier with this name may already exist.");
+            setError("Failed to save supplier. A supplier with this name may already exist.");
         }
     };
 
     const handleDelete = async (id) => {
         if (window.confirm('Are you sure you want to delete this supplier?')) {
             try {
-                await window.electronAPI.deleteSupplier(id);
+                await fetch(`/api/suppliers/${id}`, { method: 'DELETE' });
                 fetchSuppliers();
             } catch (err) {
                 console.error("Failed to delete supplier:", err);
-                 // Non-blocking notification
-                console.log('Failed to delete supplier.');
+                setError('Failed to delete supplier.');
             }
         }
     };
