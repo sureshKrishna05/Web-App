@@ -1,6 +1,6 @@
-# Billing & Inventory Management App  
+# Billing & Inventory Management Web App
 
-A **desktop billing and stock management system** built with **Electron + React + SQLite**, designed for small and medium businesses. The app provides easy billing, inventory tracking, GST-ready invoicing, and reporting, all in a lightweight cross-platform package.  
+A **web-based billing and stock management system** built with **React + Express + SQLite**, designed for small and medium businesses running on a local network or single machine. The app provides easy billing, inventory tracking, GST-ready invoicing, reporting, and data backup/restore, accessible via a web browser.
 
 ---
 
@@ -21,10 +21,10 @@ A **desktop billing and stock management system** built with **Electron + React 
   - Recent activity view  
   - Sales representative performance tracking  
 
-- ⚡ **Tech Stack**  
-  - Frontend: **Electron + React + TailwindCSS**  
-  - Backend: **SQLite (better-sqlite3)** for offline-first performance  
-  - IPC communication for database access  
+- ⚡ **Tech Stack**
+    - Frontend: **React + TailwindCSS + Vite**
+    - Backend: **Node.js + Express**
+    - Database: **SQLite (better-sqlite3)** for local data persistence
 
 ---
 
@@ -64,26 +64,41 @@ Build outputs will be available under `dist/`.
 
 ```
 billing-app/
-├── main.js                # Electron entry point
-├── preload.js             # IPC bridge
+├── main.js                # Express backend API server entry point
+├── data/                  # Contains the SQLite database file (pharmacy.db)
+├── dist/                  # Build output directory (created by `npm run build`)
 ├── src/
-│   ├── components/        # React components
-│   ├── pages/             # App pages (Billing, Items, Groups, etc.)
-│   ├── database.js        # SQLite database service
-│   └── styles/            # Tailwind styles
-├── assets/                # Icons & static files
-└── docs/                  # Documentation & screenshots
+│   ├── components/        # Reusable React components
+│   ├── pages/             # React components for each main page/view
+│   ├── database/
+│   │   └── database.js    # SQLite database service logic
+│   ├── utils/
+│   │   └── invoiceGenerator.js # PDF generation logic
+│   ├── assets/            # Static assets like images/SVGs
+│   ├── App.jsx            # Main React application component
+│   ├── main.jsx           # React application entry point
+│   └── index.css          # Main CSS file importing Tailwind
+├── index.html             # HTML entry point for Vite
+├── vite.config.js         # Vite configuration
+├── tailwind.config.js     # TailwindCSS configuration
+├── postcss.config.js      # PostCSS configuration
+├── package.json           # Project metadata and dependencies
+├── .gitignore             # Specifies intentionally untracked files
+└── README.md              # This file
 ```
 
 ---
 
-## 🧩 Key Modules  
+## 🧩 Key Modules
 
-- **`database.js`** → Handles SQLite schema & CRUD (items, invoices, groups, parties)  
-- **`AddItemModal.jsx`** → Add or edit items, auto-fill GST & HSN groups  
-- **`GroupsPage.jsx`** → Manage item groups by HSN code  
-- **`ItemsPage.jsx`** → View/edit/delete inventory items  
-- **`InvoicesPage.jsx`** → Create & print invoices  
+- **`main.js`** → Express server handling API requests for CRUD operations, PDF generation, backup/restore.
+- **`src/database/database.js`** → Manages SQLite schema, database connection, and all data access logic (items, invoices, groups, parties, settings etc.).
+- **`src/pages/BillingPage.jsx`** → UI for creating new invoices.
+- **`src/pages/ItemsPage.jsx`** → UI for viewing/adding/editing/deleting inventory items.
+- **`src/components/AddItemModal.jsx`** → Modal form for adding or editing items, includes logic for handling HSN groups.
+- **`src/pages/GroupsPage.jsx`** → UI for managing item groups by HSN code.
+- **`src/pages/SettingsPage.jsx`** → UI for updating company settings and performing database backup/restore.
+- **`src/utils/invoiceGenerator.js`** → Uses `pdfkit` to generate PDF documents for invoices.
 
 ---
 
