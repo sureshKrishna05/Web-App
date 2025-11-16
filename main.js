@@ -3,10 +3,29 @@ const path = require('path');
 const DatabaseService = require('./src/database/database.js');
 const { createInvoice, createQuotation } = require('./src/utils/invoiceGenerator.js');
 const fs = require('fs');
+const multer = require('multer'); // <-- Add multer
 
 const app = express();
 const PORT = 3300;
-const db = new DatabaseService();
+// Make db instance potentially re-assignable for restore
+let db = new DatabaseService();
+
+// --- Multer Configuration for Restore ---
+// Store the uploaded file temporarily in memory
+const storage = multer.memoryStorage();
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 100 * 1024 * 1024 }, // Limit file size (e.g., 100MB)
+    fileFilter: (req, file, cb) => {
+        // Accept only .db files
+        if (path.extname(file.originalname).toLowerCase() === '.db') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only .db files are allowed!'), false);
+        }
+    }
+});
+// --- End Multer Config ---
 
 app.use(express.json());
 
@@ -250,10 +269,15 @@ app.delete('/api/groups/:id', (req, res) => {
         if (deleted) {
             res.json({ message: 'Group deleted successfully' });
         } else {
-            res.status(404).json({ error: 'Group not found' });
+            res.status(404).json({ error: 'Group not found or contains items' });
         }
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        // Handle specific error for group containing items
+        if (error.message.includes("Cannot delete group")) {
+             res.status(400).json({ error: error.message });
+        } else {
+             res.status(500).json({ error: 'Failed to delete group: ' + error.message });
+        }
     }
 });
 
@@ -324,6 +348,107 @@ app.post('/api/settings', (req, res) => {
 });
 
 
+// --- NEW: Backup Endpoint ---
+app.get('/api/backup-db', (req, res) => {
+    try {
+        const dbPath = db.getDbPath(); // Get the actual path from DatabaseService
+        // Ensure data consistency before backup
+        db.checkpointDb();
+
+        // Check if file exists
+        if (!fs.existsSync(dbPath)) {
+            return res.status(404).json({ error: 'Database file not found.' });
+        }
+
+        const dateStamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const backupFilename = `pharmacy-backup-${dateStamp}.db`;
+
+        res.download(dbPath, backupFilename, (err) => {
+            if (err) {
+                console.error("Error sending backup file:", err);
+                // Avoid sending error response if headers already sent
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Failed to download backup file.' });
+                }
+            }
+        });
+    } catch (error) {
+        console.error("Backup Error:", error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to create backup: ' + error.message });
+        }
+    }
+});
+
+// --- NEW: Restore Endpoint ---
+// Use multer middleware to handle the single file upload named 'dbfile'
+app.post('/api/restore-db', upload.single('dbfile'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No database file uploaded.' });
+    }
+
+    const currentDbPath = db.getDbPath();
+    const backupPath = currentDbPath + '.backup-' + Date.now(); // Create a backup of the current DB
+    let originalDbRestored = false;
+
+    try {
+        console.log("Closing current database connection...");
+        db.close(); // Close the current DB connection
+
+        console.log(`Backing up current DB to ${backupPath}...`);
+        fs.renameSync(currentDbPath, backupPath); // Rename current DB as a backup
+
+        console.log(`Writing uploaded file to ${currentDbPath}...`);
+        fs.writeFileSync(currentDbPath, req.file.buffer); // Write the uploaded buffer to the original DB path
+
+        console.log("Re-initializing database service...");
+        // Re-initialize the database service with the new file
+        db = new DatabaseService(); // Replace the global/module-level instance
+
+        res.json({ message: 'Database restored successfully. Please verify the data.' });
+        console.log("Database restore completed.");
+
+    } catch (error) {
+        console.error("Restore Error:", error);
+        // Attempt to restore the backup if something went wrong during write/re-init
+        if (fs.existsSync(backupPath)) {
+            console.log("Attempting to restore backup due to error...");
+            try {
+                 // Ensure current (potentially corrupt) file is removed before renaming backup
+                 if (fs.existsSync(currentDbPath) && !originalDbRestored) {
+                    fs.unlinkSync(currentDbPath);
+                 }
+                fs.renameSync(backupPath, currentDbPath);
+                db = new DatabaseService(); // Re-initialize with the original DB
+                originalDbRestored = true;
+                console.log("Original database restored from backup.");
+            } catch (restoreError) {
+                console.error("CRITICAL: Failed to restore backup after failed restore attempt:", restoreError);
+                // At this point, manual intervention might be required.
+                // Send error even if headers might have been sent (best effort)
+                return res.status(500).json({ error: 'Critical error during restore and backup recovery. Manual check required. Original error: ' + error.message });
+            }
+        }
+        // Send the original error if backup restoration wasn't needed or failed critically
+         if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to restore database: ' + error.message });
+         }
+
+    } finally {
+        // Optional: Clean up the temporary backup file if restore was successful and no errors occurred
+        // Be cautious with this in case verification is needed.
+        // if (fs.existsSync(backupPath) && !originalDbRestored && !res.headersSent /* check if response indicates success */ ) {
+        //     try {
+        //         fs.unlinkSync(backupPath);
+        //         console.log("Cleaned up temporary backup file.");
+        //     } catch (cleanupError) {
+        //         console.error("Failed to clean up backup file:", cleanupError);
+        //     }
+        // }
+    }
+});
+
+
 // PDF Download
 app.post('/api/download-invoice-pdf', (req, res) => {
     try {
@@ -353,25 +478,27 @@ app.post('/api/download-invoice-pdf', (req, res) => {
             settings
         };
 
-        const tempFilePath = path.join(__dirname, `invoice-${pdfData.invoiceNumber}.pdf`);
-        const stream = fs.createWriteStream(tempFilePath);
-        createInvoice(pdfData, stream);
+        // Create PDF in memory
+        const buffers = [];
+        const doc = createInvoice(pdfData, null); // Pass null stream initially
 
-        stream.on('finish', () => {
-            res.download(tempFilePath, `invoice-${pdfData.invoiceNumber}.pdf`, (err) => {
-                if (err) {
-                    console.error('Error sending file:', err);
-                }
-                // Clean up the temporary file
-                fs.unlink(tempFilePath, (unlinkErr) => {
-                    if (unlinkErr) console.error('Error deleting temp file:', unlinkErr);
-                });
-            });
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => {
+            const pdfBuffer = Buffer.concat(buffers);
+            const filename = `invoice-${pdfData.invoiceNumber}.pdf`;
+
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.send(pdfBuffer);
         });
+        // createInvoice function calls doc.end() internally when stream is finished/not provided
 
     } catch (error) {
         console.error('Failed to download invoice PDF:', error);
-        res.status(500).json({ error: error.message });
+        // Ensure response isn't sent twice if headers already sent
+        if (!res.headersSent) {
+            res.status(500).json({ error: error.message });
+        }
     }
 });
 
@@ -386,4 +513,11 @@ if (process.env.NODE_ENV === 'production') {
 
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('Closing database connection...');
+  db.close();
+  process.exit(0);
 });
