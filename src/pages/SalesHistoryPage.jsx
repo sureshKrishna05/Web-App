@@ -65,6 +65,7 @@ const SalesHistoryPage = () => {
         // This functionality would need a backend endpoint similar to PDF download.
     };
 
+    // ========== [START] Corrected Download/Error Handling ==========
     const handleDownload = async (invoiceId) => {
         try {
             const response = await fetch('/api/download-invoice-pdf', {
@@ -83,20 +84,35 @@ const SalesHistoryPage = () => {
                 let filename = `invoice-${invoiceId}.pdf`;
                 if (contentDisposition) {
                     const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-                    if (filenameMatch.length === 2)
+                    // FIXED: Check if filenameMatch is not null before accessing length
+                    if (filenameMatch && filenameMatch.length === 2) {
                         filename = filenameMatch[1];
+                    }
                 }
                 a.download = filename;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
+                // FIXED: Remove the temporary link element from the DOM
+                a.remove(); 
             } else {
-                throw new Error('Failed to download PDF');
+                // FIXED: Try to parse the error message from the server
+                let errorMsg = 'Failed to download PDF';
+                try {
+                    const errorData = await response.json();
+                    errorMsg = errorData.error || errorMsg; // Use server error if available
+                } catch (e) {
+                    // Ignore if response wasn't JSON
+                }
+                throw new Error(errorMsg);
             }
         } catch (err) {
             console.error('An error occurred during download:', err);
+            // FIXED: Show the actual error message to the user
+            alert(`Download failed: ${err.message}`);
         }
     };
+    // ========== [END] Corrected Download/Error Handling ==========
 
 
     return (

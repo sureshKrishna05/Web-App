@@ -20,7 +20,14 @@ const BillingPage = () => {
     const [itemDetails, setItemDetails] = useState({ hsn: '', batch_number: '', expiry_date: '', ptr: '', quantity: 1, available_stock: '' });
 
     const [billItems, setBillItems] = useState([]);
-    const [totals, setTotals] = useState({ subtotal: 0, tax: 0, finalAmount: 0 });
+    
+    const [totals, setTotals] = useState({ 
+        subtotal: 0, 
+        tax: 0, 
+        finalAmount: 0, 
+        taxBreakdown: {} 
+    });
+    
     const [paymentMode, setPaymentMode] = useState('Credit');
 
     const [highlightedClientIndex, setHighlightedClientIndex] = useState(-1);
@@ -116,7 +123,7 @@ const BillingPage = () => {
             ptr: med.price || '',
             quantity: 1,
             available_stock: med.stock,
-            gst_percentage: med.gst_percentage
+            gst_percentage: med.gst_percentage // This is crucial
         });
         setMedicineSuggestions([]);
         setHighlightedMedicineIndex(-1);
@@ -130,7 +137,8 @@ const BillingPage = () => {
             ...selectedMedicine,
             ...itemDetails,
             price: Number(itemDetails.ptr),
-            quantity: Number(itemDetails.quantity)
+            quantity: Number(itemDetails.quantity),
+            gst_percentage: selectedMedicine.gst_percentage || 0
         };
         setBillItems(prev => [...prev, newItem]);
 
@@ -183,13 +191,26 @@ const BillingPage = () => {
 
     useEffect(() => {
         const subtotal = billItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-        const totalTax = billItems.reduce((acc, item) => {
+        
+        const newTaxBreakdown = {};
+        let totalTax = 0;
+
+        for (const item of billItems) {
             const itemTotal = item.price * item.quantity;
-            const taxForItem = itemTotal * ((item.gst_percentage || 0) / 100);
-            return acc + taxForItem;
-        }, 0);
+            const gstRate = item.gst_percentage || 0;
+            const taxForItem = itemTotal * (gstRate / 100);
+            
+            totalTax += taxForItem;
+            
+            if (newTaxBreakdown[gstRate]) {
+                newTaxBreakdown[gstRate] += taxForItem;
+            } else {
+                newTaxBreakdown[gstRate] = taxForItem;
+            }
+        }
+
         const finalAmount = Math.round(subtotal + totalTax);
-        setTotals({ subtotal, tax: totalTax, finalAmount });
+        setTotals({ subtotal, tax: totalTax, finalAmount, taxBreakdown: newTaxBreakdown });
     }, [billItems]);
 
     const resetForm = async () => {
@@ -219,7 +240,17 @@ const BillingPage = () => {
             final_amount: totals.finalAmount,
             payment_mode: paymentMode,
             status: status,
-            items: billItems.map(item => ({ medicine_id: item.id, name: item.name, hsn: item.hsn, batch_number: item.batch_number, quantity: item.quantity, free_quantity: 0, unit_price: item.price, ptr: item.ptr, total_price: item.price * item.quantity }))
+            items: billItems.map(item => ({ 
+                medicine_id: item.id, 
+                name: item.name, 
+                hsn: item.hsn, 
+                batch_number: item.batch_number, 
+                quantity: item.quantity, 
+                free_quantity: 0, 
+                unit_price: item.price, 
+                ptr: item.ptr, 
+                total_price: item.price * item.quantity 
+            }))
         };
         
         try {
@@ -228,8 +259,6 @@ const BillingPage = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(invoiceData)
             });
-            // We can't trigger a print dialog from here, but the invoice is saved.
-            // A better UX would be to open the generated PDF in a new tab.
             alert(`Invoice ${status} saved successfully!`);
             resetForm();
         } catch (error) {
@@ -240,6 +269,7 @@ const BillingPage = () => {
     return (
         <div className="p-0">
             <div className="bg-white rounded-lg p-6">
+                {/* --- Client and Invoice Details --- */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="relative">
                         <label className="text-sm font-medium">Client</label>
@@ -264,6 +294,7 @@ const BillingPage = () => {
                     </div>
                 )}
                 
+                {/* --- Item Input Row --- */}
                 <div className="grid grid-cols-9 gap-2 items-end p-2 border-t mt-4">
                     <div className="col-span-2 relative"><label className="text-xs">Select Medicine</label><input type="text" ref={medicineInputRef} value={medicineSearch} onChange={e => handleMedicineSearch(e.target.value)} onKeyDown={handleMedicineKeyDown} className="w-full p-2 border rounded"/>
                         {medicineSuggestions.length > 0 && (
@@ -281,15 +312,54 @@ const BillingPage = () => {
                     <div><button ref={addItemButtonRef} onClick={handleAddItem} onKeyDown={(e) => {if (e.key === 'Enter') { e.preventDefault(); handleAddItem(); }}} className="w-full bg-green-500 text-white p-2 rounded">Add</button></div>
                 </div>
 
+                {/* --- [FIXED] Updated Item Table Headers --- */}
                 <table className="w-full mt-4 text-sm">
-                    <thead><tr className="border-b"><th className="p-1 text-left">MEDICINE</th><th className="p-1 text-left">HSN</th><th className="p-1 text-left">BATCH NO</th><th className="p-1 text-right">QTY</th><th className="p-1 text-right">RATE</th><th className="p-1 text-right">AMOUNT</th><th className="p-1"></th></tr></thead>
+                    <thead>
+                        <tr className="border-b">
+                            <th className="p-1 text-left font-medium text-gray-600 uppercase tracking-wider">MEDICINE</th>
+                            <th className="p-1 text-left font-medium text-gray-600 uppercase tracking-wider">HSN</th>
+                            <th className="p-1 text-left font-medium text-gray-600 uppercase tracking-wider">BATCH NO</th>
+                            <th className="p-1 text-right font-medium text-gray-600 uppercase tracking-wider">QTY</th>
+                            <th className="p-1 text-right font-medium text-gray-600 uppercase tracking-wider">RATE</th>
+                            <th className="p-1 text-right font-medium text-gray-600 uppercase tracking-wider">TAXABLE AMT</th>
+                            <th className="p-1 text-right font-medium text-gray-600 uppercase tracking-wider">GST %</th>
+                            <th className="p-1 text-right font-medium text-gray-600 uppercase tracking-wider">GST AMT</th>
+                            {/* --- [NEW] --- */}
+                            <th className="p-1 text-right font-medium text-gray-600 uppercase tracking-wider">TOTAL</th>
+                            <th className="p-1"></th>
+                        </tr>
+                    </thead>
                     <tbody>
-                        {billItems.map((item, i) => (
-                            <tr key={i} className="border-b hover:bg-gray-50"><td className="p-1">{item.name}</td><td className="p-1">{item.hsn}</td><td className="p-1">{item.batch_number}</td><td className="p-1 text-right">{item.quantity}</td><td className="p-1 text-right">₹{item.price.toFixed(2)}</td><td className="p-1 text-right">₹{(item.price * item.quantity).toFixed(2)}</td><td className="p-1 text-center"><button onClick={() => handleRemoveItem(i)} className="text-red-500">X</button></td></tr>
-                        ))}
+                        {billItems.map((item, i) => {
+                            const taxableAmount = item.price * item.quantity;
+                            const gstRate = item.gst_percentage || 0;
+                            const taxForItem = taxableAmount * (gstRate / 100);
+                            // --- [NEW] ---
+                            const totalAmount = taxableAmount + taxForItem;
+                            
+                            return (
+                                <tr key={i} className="border-b hover:bg-gray-50">
+                                    <td className="p-1">{item.name}</td>
+                                    <td className="p-1">{item.hsn}</td>
+                                    <td className="p-1">{item.batch_number}</td>
+                                    <td className="p-1 text-right">{item.quantity}</td>
+                                    <td className="p-1 text-right">₹{item.price.toFixed(2)}</td>
+                                    <td className="p-1 text-right">₹{taxableAmount.toFixed(2)}</td>
+                                    <td className="p-1 text-right">{gstRate.toFixed(2)}%</td>
+                                    <td className="p-1 text-right">₹{taxForItem.toFixed(2)}</td>
+                                    {/* --- [NEW] --- */}
+                                    <td className="p-1 text-right font-medium">₹{totalAmount.toFixed(2)}</td>
+                                    <td className="p-1 text-center">
+                                        <button onClick={() => handleRemoveItem(i)} className="text-red-500">X</button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
+                {/* --- [END OF TABLE FIX] --- */}
 
+                {/* --- Totals Section --- */}
                 <div className="flex justify-between items-end mt-4 pt-4 border-t">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -306,12 +376,30 @@ const BillingPage = () => {
                             </select>
                         </div>
                     </div>
+
                     <div className="w-1/3 text-right space-y-1">
-                        <div className="flex justify-between"><span>Subtotal:</span><span>₹{totals.subtotal.toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span>Tax (GST):</span><span>₹{totals.tax.toFixed(2)}</span></div>
-                        <div className="flex justify-between font-bold text-lg"><span>Final Total:</span><span>₹{totals.finalAmount.toFixed(2)}</span></div>
+                        <div className="flex justify-between">
+                            <span>Subtotal (Taxable):</span>
+                            <span>₹{totals.subtotal.toFixed(2)}</span>
+                        </div>
+                        
+                        {Object.entries(totals.taxBreakdown).sort(([a], [b]) => a - b).map(([rate, amount]) => (
+                            <div key={rate} className="flex justify-between text-sm text-gray-700">
+                                <span>GST @ {Number(rate).toFixed(2)}%:</span>
+                                <span>+ ₹{amount.toFixed(2)}</span>
+                            </div>
+                        ))}
+
+                        {(totals.tax > 0) && <div className="border-t border-gray-200 my-1"></div>}
+
+                        <div className="flex justify-between font-bold text-lg">
+                            <span>Final Total:</span>
+                            <span>₹{totals.finalAmount.toFixed(2)}</span>
+                        </div>
                     </div>
                 </div>
+
+                {/* --- Save Buttons --- */}
                 <div className="flex justify-end space-x-2 mt-4">
                     <button onClick={() => handleSaveInvoice('Estimate')} className="bg-gray-600 text-white px-4 py-2 rounded">Save & Print Estimate</button>
                     <button onClick={() => handleSaveInvoice('Completed')} className="bg-blue-600 text-white px-4 py-2 rounded">Save & Print Invoice</button>

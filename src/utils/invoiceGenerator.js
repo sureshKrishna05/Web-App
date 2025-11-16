@@ -1,11 +1,14 @@
 const PDFDocument = require('pdfkit');
-const fs = require('fs');
+// const fs = require('fs'); // <-- FIXED: Removed unused 'fs' module
 const { toWords } = require('number-to-words');
 
 function createInvoice(invoice, stream) {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
 
-    doc.pipe(stream);
+    // Check if stream is provided, otherwise, the doc will buffer in memory (for main.js)
+    if (stream) {
+        doc.pipe(stream);
+    }
 
     const settings = invoice.settings || {};
 
@@ -34,7 +37,8 @@ function createInvoice(invoice, stream) {
     doc.font('Helvetica-Bold').text('Invoice #:', 350, invoiceInfoTop);
     doc.font('Helvetica').text(invoice.invoiceNumber, 420, invoiceInfoTop);
     doc.font('Helvetica-Bold').text('Invoice Date:', 350, invoiceInfoTop + 15);
-    doc.font('Helvetica').text(new Date().toLocaleDateString('en-GB'), 420, invoiceInfoTop + 15);
+    // <-- FIXED: Use the invoice's creation date, not the current date
+    doc.font('Helvetica').text(new Date(invoice.created_at).toLocaleDateString('en-GB'), 420, invoiceInfoTop + 15);
     doc.font('Helvetica-Bold').text('Payment Mode:', 350, invoiceInfoTop + 30);
     doc.font('Helvetica').text(invoice.paymentMode, 420, invoiceInfoTop + 30);
     doc.moveDown(5);
@@ -78,10 +82,11 @@ function createInvoice(invoice, stream) {
     doc.font('Helvetica-Bold').text('Subtotal:', 350, totalsTop, { align: 'right', width: 100 });
     doc.font('Helvetica').text(`₹${subtotal.toFixed(2)}`, 460, totalsTop, { align: 'right', width: 90 });
 
-    doc.font('Helvetica-Bold').text('SGST (9%):', 350, totalsTop + 15, { align: 'right', width: 100 });
+    // <-- FIXED: Removed hardcoded (9%) from labels
+    doc.font('Helvetica-Bold').text('SGST:', 350, totalsTop + 15, { align: 'right', width: 100 });
     doc.font('Helvetica').text(`₹${sgst}`, 460, totalsTop + 15, { align: 'right', width: 90 });
 
-    doc.font('Helvetica-Bold').text('CGST (9%):', 350, totalsTop + 30, { align: 'right', width: 100 });
+    doc.font('Helvetica-Bold').text('CGST:', 350, totalsTop + 30, { align: 'right', width: 100 });
     doc.font('Helvetica').text(`₹${cgst}`, 460, totalsTop + 30, { align: 'right', width: 90 });
     
     doc.moveTo(350, totalsTop + 48).lineTo(550, totalsTop + 48).stroke();
@@ -96,18 +101,23 @@ function createInvoice(invoice, stream) {
     // --- Footer ---
     const footerY = doc.page.height - 100;
     if (settings.footer_text) {
-        doc.fontSize(8).font('Helvetica-Oblique').text(settings.footer_text, { align: 'center' });
+        doc.fontSize(8).font('Helvetica-Oblique').text(settings.footer_text, 50, footerY, { align: 'center', width: 500 }); // Added margins and width for safety
     }
-    doc.font('Helvetica-Bold').text(`For ${settings.company_name || 'Your Company Name'}`, 50, footerY + 30, { align: 'right' });
+    doc.font('Helvetica-Bold').text(`For ${settings.company_name || 'Your Company Name'}`, 50, footerY + 30, { align: 'right', width: 500 }); // Added margins and width
 
 
     doc.end();
+    
+    // Return doc in case it's not piped (e.g., for in-memory buffer)
+    return doc; 
 }
 
 function createQuotation(quotation, stream) {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
 
-    doc.pipe(stream);
+    if (stream) {
+        doc.pipe(stream);
+    }
     
     const settings = quotation.settings || {};
 
@@ -130,7 +140,8 @@ function createQuotation(quotation, stream) {
     doc.text(quotation.client?.phone || '', 50, infoTop + 45);
 
     doc.font('Helvetica-Bold').text('Date:', 350, infoTop);
-    doc.font('Helvetica').text(new Date().toLocaleDateString('en-GB'), 420, infoTop);
+    // <-- FIXED: Use the quotation's creation date, not the current date
+    doc.font('Helvetica').text(new Date(quotation.created_at).toLocaleDateString('en-GB'), 420, infoTop);
     doc.moveDown(5);
 
     // --- Table ---
@@ -166,6 +177,8 @@ function createQuotation(quotation, stream) {
     doc.font('Helvetica-Bold').text(`₹${finalAmount.toFixed(2)}`, 460, y + 15, { align: 'right', width: 90 });
 
     doc.end();
+    
+    return doc;
 }
 
 

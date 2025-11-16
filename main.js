@@ -449,7 +449,9 @@ app.post('/api/restore-db', upload.single('dbfile'), (req, res) => {
 });
 
 
-// PDF Download
+// ========== [START] PDF Download Fix ==========
+// This section has been updated to stream the PDF directly
+// instead of saving a temporary file, which caused the 500 error.
 app.post('/api/download-invoice-pdf', (req, res) => {
     try {
         const { invoiceId } = req.body;
@@ -478,29 +480,27 @@ app.post('/api/download-invoice-pdf', (req, res) => {
             settings
         };
 
-        // Create PDF in memory
-        const buffers = [];
-        const doc = createInvoice(pdfData, null); // Pass null stream initially
+        // --- MODIFIED SECTION ---
+        // Set headers for PDF download
+        const filename = `invoice-${pdfData.invoiceNumber}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-        doc.on('data', buffers.push.bind(buffers));
-        doc.on('end', () => {
-            const pdfBuffer = Buffer.concat(buffers);
-            const filename = `invoice-${pdfData.invoiceNumber}.pdf`;
-
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.setHeader('Content-Type', 'application/pdf');
-            res.send(pdfBuffer);
-        });
-        // createInvoice function calls doc.end() internally when stream is finished/not provided
+        // Generate the PDF and pipe it directly to the response (res)
+        // The createInvoice function will call .end() on the stream (res)
+        createInvoice(pdfData, res); 
+        // --- END MODIFIED SECTION ---
 
     } catch (error) {
         console.error('Failed to download invoice PDF:', error);
-        // Ensure response isn't sent twice if headers already sent
+        // Check if headers have been sent. If not, we can send a JSON error.
+        // If they have (e.g., PDF generation started), we can only end the response.
         if (!res.headersSent) {
             res.status(500).json({ error: error.message });
         }
     }
 });
+// ========== [END] PDF Download Fix ==========
 
 
 // In production, serve the React app for all other requests
