@@ -471,7 +471,14 @@ app.post('/api/download-invoice-pdf', (req, res) => {
             invoiceNumber: invoiceDetails.invoice_number,
             paymentMode: invoiceDetails.payment_mode || 'N/A',
             client: clientForPdf,
-            billItems: invoiceDetails.items.map(item => ({ ...item, name: item.medicine_name, price: item.unit_price })),
+            billItems: invoiceDetails.items.map(item => ({
+                name: item.medicine_name,
+                hsn: item.hsn,
+                batch_number: item.batch_number,
+                quantity: item.quantity,
+                price: item.unit_price,
+                gst_percentage: item.gst_percentage || 0
+            })),
             totals: {
                 subtotal: invoiceDetails.total_amount,
                 tax: invoiceDetails.tax,

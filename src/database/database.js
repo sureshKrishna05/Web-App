@@ -1,19 +1,28 @@
 const path = require('path');
 // REMOVED: const { app } = require('electron'); 
 const Database = require('better-sqlite3');
+const fs = require('fs');
 
 class DatabaseService {
     constructor() {
-        // Corrected: Store the database in a 'data' folder within your project
+        // Store the database in a 'data' folder within your project
         const dbDir = path.join(__dirname, '..', '..', 'data');
-        if (!require('fs').existsSync(dbDir)) {
-            require('fs').mkdirSync(dbDir);
+        if (!fs.existsSync(dbDir)) {
+            fs.mkdirSync(dbDir);
         }
         this.dbPath = path.join(dbDir, 'pharmacy.db');
         this.db = new Database(this.dbPath);
         this.db.pragma('journal_mode = WAL');
         this.db.pragma('foreign_keys = ON');
         this.initializeTables();
+
+        // Optional: Run lightweight maintenance / migration on startup
+        try {
+            this.migrateMedicineGroups();
+        } catch (err) {
+            // don't crash on migration error; log it for manual check
+            console.error('Migration error (migrateMedicineGroups):', err.message);
+        }
     }
 
     /**
@@ -190,6 +199,36 @@ class DatabaseService {
                 footer_text = excluded.footer_text;
         `);
         return stmt.run(settings);
+    }
+
+    // ---------------- Migration helper ----------------
+    /**
+     * One-time migration to ensure medicines that have an HSN but no group_id
+     * are linked to an item_groups row. This avoids missing gst_percentage in queries.
+     * Safe to run multiple times (idempotent for existing groups).
+     */
+    migrateMedicineGroups() {
+        const missingGroups = this.db.prepare(`
+            SELECT DISTINCT hsn FROM medicines WHERE hsn IS NOT NULL AND (group_id IS NULL OR group_id = 0)
+        `).all();
+
+        const insertGroupStmt = this.db.prepare('INSERT OR IGNORE INTO item_groups (hsn_code, gst_percentage) VALUES (?, 0)');
+        const getGroupStmt = this.db.prepare('SELECT id FROM item_groups WHERE hsn_code = ?');
+        const updateMedicineStmt = this.db.prepare('UPDATE medicines SET group_id = ? WHERE hsn = ?');
+
+        const tx = this.db.transaction((rows) => {
+            for (const r of rows) {
+                if (!r.hsn) continue;
+                insertGroupStmt.run(r.hsn);
+                const g = getGroupStmt.get(r.hsn);
+                if (g && g.id) {
+                    updateMedicineStmt.run(g.id, r.hsn);
+                }
+            }
+        });
+
+        tx(missingGroups);
+        // Optional: vacuum or checkpoint can be done outside if needed
     }
 
     // --- (The rest of your existing functions remain here) ---
@@ -418,12 +457,17 @@ class DatabaseService {
         `).get(invoiceId);
 
         if (invoice) {
+            // IMPORTANT: include LEFT JOIN to item_groups and COALESCE to avoid NULLs
             invoice.items = this.db.prepare(`
                 SELECT 
                     ii.*,
-                    m.name as medicine_name
+                    m.hsn,
+                    m.batch_number,
+                    m.name as medicine_name,
+                    COALESCE(ig.gst_percentage, 0) AS gst_percentage
                 FROM invoice_items ii
                 JOIN medicines m ON ii.medicine_id = m.id
+                LEFT JOIN item_groups ig ON m.group_id = ig.id
                 WHERE ii.invoice_id = ?
             `).all(invoiceId);
         }
@@ -519,7 +563,7 @@ class DatabaseService {
         return this.db.prepare(`
             SELECT 
                 m.*, 
-                ig.gst_percentage
+                COALESCE(ig.gst_percentage, 0) as gst_percentage
             FROM medicines m
             LEFT JOIN item_groups ig ON m.group_id = ig.id
             ORDER BY m.name
@@ -529,7 +573,7 @@ class DatabaseService {
         return this.db.prepare(`
             SELECT 
                 m.*,
-                ig.gst_percentage
+                COALESCE(ig.gst_percentage, 0) as gst_percentage
             FROM medicines m
             LEFT JOIN item_groups ig ON m.group_id = ig.id
             WHERE m.name LIKE ? 
