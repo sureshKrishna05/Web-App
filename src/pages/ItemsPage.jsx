@@ -32,40 +32,22 @@ const ItemsPage = () => {
             setMedicines(data);
         } catch (err) {
             setError(err.message);
-            console.error('Failed to fetch medicines:', err);
         } finally {
             setLoading(false);
         }
     }, []);
 
-    useEffect(() => {
-        fetchMedicines();
-    }, [fetchMedicines]);
+    useEffect(() => { fetchMedicines(); }, [fetchMedicines]);
 
-    const handleOpenModal = (item = null) => {
-        setSelectedItem(item);
-        setIsModalOpen(true);
-    };
-
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
-        setSelectedItem(null);
-    };
+    const handleOpenModal = (item = null) => { setSelectedItem(item); setIsModalOpen(true); };
+    const handleCloseModal = () => { setIsModalOpen(false); setSelectedItem(null); };
 
     const handleSave = async (itemData) => {
         try {
             if (selectedItem) {
-                await fetch(`/api/medicines/${selectedItem.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(itemData)
-                });
+                await fetch(`/api/medicines/${selectedItem.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(itemData) });
             } else {
-                await fetch('/api/medicines', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(itemData)
-                });
+                await fetch('/api/medicines', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(itemData) });
             }
             fetchMedicines();
             handleCloseModal();
@@ -86,54 +68,49 @@ const ItemsPage = () => {
         }
     };
 
-    if (loading) {
-        return <div className="text-center p-8">Loading inventory...</div>;
-    }
-
-    if (error) {
-        return <div className="text-center p-8 text-red-500">Error: {error}</div>;
-    }
+    if (loading) return <div className="text-center p-8 text-green-700 font-medium">Loading inventory...</div>;
+    if (error) return <div className="text-center p-8 text-red-500">Error: {error}</div>;
 
     return (
         <div className="p-4">
             <div className="flex justify-end items-center mb-6">
                 <button
                     onClick={() => handleOpenModal()}
-                    className="flex items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out shadow-md"
+                    className="flex items-center bg-green-600 text-white font-semibold py-2 px-5 rounded-xl hover:bg-green-700 transition-all duration-150 shadow-sm"
                 >
                     <IconPlus />
                     Add New Item
                 </button>
             </div>
 
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
+            <div className="bg-white shadow-sm rounded-2xl overflow-hidden border border-green-100">
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-100">
+                    <table className="min-w-full divide-y divide-gray-100">
+                        <thead className="bg-green-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Batch No.</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Expiry Date</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Price</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Stock</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider">Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider">Batch No.</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider">Expiry Date</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider">Price</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider">Stock</th>
+                                <th className="px-6 py-3 text-right text-xs font-semibold text-green-800 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white divide-y divide-gray-100">
                             {medicines.length > 0 ? (
                                 medicines.map((item) => (
-                                    <tr key={item.id} className="hover:bg-gray-50">
+                                    <tr key={item.id} className="hover:bg-green-50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.batch_number}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.expiry_date}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{Number(item.price).toFixed(2)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.stock}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.batch_number}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.expiry_date}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">₹{Number(item.price).toFixed(2)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.stock}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <div className="flex justify-end space-x-4">
-                                                <button onClick={() => handleOpenModal(item)} className="text-blue-600 hover:text-blue-900 transition-colors">
+                                            <div className="flex justify-end space-x-3">
+                                                <button onClick={() => handleOpenModal(item)} className="text-green-600 hover:text-green-800 transition-colors">
                                                     <IconEdit />
                                                 </button>
-                                                <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-900 transition-colors">
+                                                <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700 transition-colors">
                                                     <IconDelete />
                                                 </button>
                                             </div>
@@ -142,7 +119,7 @@ const ItemsPage = () => {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="6" className="text-center py-10 text-gray-500">No medicines found in inventory.</td>
+                                    <td colSpan="6" className="text-center py-10 text-gray-400">No medicines found in inventory.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -151,12 +128,7 @@ const ItemsPage = () => {
             </div>
 
             {isModalOpen && (
-                <AddItemModal
-                    isOpen={isModalOpen}
-                    onClose={handleCloseModal}
-                    onSave={handleSave}
-                    item={selectedItem}
-                />
+                <AddItemModal isOpen={isModalOpen} onClose={handleCloseModal} onSave={handleSave} item={selectedItem} />
             )}
         </div>
     );
