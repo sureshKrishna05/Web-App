@@ -37,7 +37,7 @@ A **web-based billing and stock management system** built with **React + Express
 ### Installation  
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/billing-app.git
+git clone https://github.com/sureshKrishna05/billing-app.git
 cd billing-app
 
 # Install dependencies
